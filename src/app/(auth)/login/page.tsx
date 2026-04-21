@@ -1,8 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import { login } from '@/app/actions/auth'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import LoginForm from './form'
 
 interface LoginPageProps {
   searchParams: Promise<{ error?: string; message?: string }>
@@ -87,68 +85,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </h2>
           <p className="text-zinc-500 text-sm mb-8">Sign in to continue</p>
 
-          <form action={login} className="space-y-5">
-            {params.error && (
-              <div className="rounded-md bg-red-950 border border-red-800 px-4 py-3 text-sm text-red-400">
-                {params.error}
-              </div>
-            )}
-            {params.message && (
-              <div className="rounded-md bg-emerald-950 border border-emerald-800 px-4 py-3 text-sm text-emerald-400">
-                {params.message}
-              </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-zinc-400 text-sm">
-                Email
-              </Label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                required
-                className="h-11 bg-[#111111] border-[#27272A] text-white placeholder:text-zinc-600
-                           focus-visible:border-[#FACC15] focus-visible:ring-2
-                           focus-visible:ring-[#FACC15]/20 focus-visible:ring-offset-0"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="password" className="text-zinc-400 text-sm">
-                Password
-              </Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                required
-                className="h-11 bg-[#111111] border-[#27272A] text-white placeholder:text-zinc-600
-                           focus-visible:border-[#FACC15] focus-visible:ring-2
-                           focus-visible:ring-[#FACC15]/20 focus-visible:ring-offset-0"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full font-bold rounded-lg transition-all hover:brightness-110 cursor-pointer"
-              style={{
-                backgroundColor: '#FACC15',
-                color: '#000000',
-                height: '44px',
-              }}
-            >
-              Sign In
-            </button>
-          </form>
+          <LoginForm error={params.error} message={params.message} />
 
           <p className="mt-6 text-sm text-zinc-500 text-center">
             Don&apos;t have an account?{' '}
             <Link
               href="/signup"
-              className="font-medium transition-all hover:brightness-110"
+              className="font-medium transition-all hover:brightness-110 cursor-pointer"
               style={{ color: '#FACC15' }}
             >
               Sign up

@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Star, Clock } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import type { Offer } from '@/lib/demo-offers'
+import type { SupabaseOffer } from '@/types/offer'
+import OfferDrawer from './offer-drawer'
 
-// All gradient class strings live here so Tailwind JIT picks them up
+// Gradient strings must live here so Tailwind JIT picks them up
 const gradientMap: Record<string, string> = {
   blue:    'from-blue-900 to-blue-700',
   purple:  'from-purple-900 to-purple-700',
@@ -20,95 +21,138 @@ const gradientMap: Record<string, string> = {
   lime:    'from-lime-900 to-lime-700',
   yellow:  'from-yellow-900 to-yellow-700',
 }
+const gradientKeys = Object.keys(gradientMap)
 
-const langMap: Record<string, string> = {
-  EN: '🇺🇸 English',
-  PT: '🇧🇷 Portuguese (BR)',
-  ES: '🇪🇸 Spanish',
-  FR: '🇫🇷 French',
-  DE: '🇩🇪 German',
-  IT: '🇮🇹 Italian',
+function deriveGradient(id: string): string {
+  const hex = id.replace(/-/g, '')
+  const num = parseInt(hex.slice(-2), 16)
+  return gradientMap[gradientKeys[num % gradientKeys.length]]
+}
+
+function todayColor(today: number, yesterday: number): 'green' | 'yellow' | 'red' {
+  if (today > yesterday) return 'green'
+  if (today >= yesterday * 0.8) return 'yellow'
+  return 'red'
 }
 
 interface OfferCardProps {
-  offer: Offer
+  offer: SupabaseOffer
   winning?: boolean
 }
 
 export default function OfferCard({ offer, winning = false }: OfferCardProps) {
-  const [starred, setStarred] = useState(false)
-  const gradientClass = gradientMap[offer.gradient] ?? 'from-zinc-900 to-zinc-700'
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const today     = offer.today_ads ?? 0
+  const yesterday = offer.yesterday_ads ?? 0
+  const days      = offer.days_running ?? 0
+
+  const gradientClass = deriveGradient(offer.id)
+  const color   = todayColor(today, yesterday)
+  const diff    = today - yesterday
+
+  const todayTextCls =
+    color === 'green'  ? 'text-green-400' :
+    color === 'yellow' ? 'text-yellow-400' :
+                         'text-red-400'
+  const diffTextCls = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-zinc-400'
+  const diffArrow   = diff > 0 ? '↗' : diff < 0 ? '↘' : '→'
+
+  const nicheName   = offer.niches?.name ?? ''
+  const typeName    = offer.offer_types?.name ?? ''
+  const trafficName = offer.traffic_sources?.name ?? ''
+  const langDisplay = offer.languages
+    ? `${offer.languages.flag_emoji ?? ''} ${offer.languages.name}`.trim()
+    : ''
 
   return (
-    <div className="bg-[#111111] rounded-xl border border-zinc-800 overflow-hidden hover:border-zinc-600 transition-all duration-200 cursor-pointer group">
-      {/* Thumbnail */}
-      <div className={cn('h-44 bg-gradient-to-br relative', gradientClass)}>
-        {/* Status / Winning badge */}
-        <div className="absolute top-2 left-2">
-          {winning ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-400 border border-yellow-400/30">
-              💀 Steal
-            </span>
-          ) : offer.status === 'Scaling' ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
-              Scaling
-            </span>
-          ) : (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
-              New
-            </span>
+    <>
+      <div
+        className="bg-[#0D0D0D] border border-[#1C1C1C] rounded-xl overflow-hidden hover:border-zinc-700 transition-all duration-200 cursor-pointer flex flex-col"
+        onClick={() => setDrawerOpen(true)}
+      >
+        {/* ── Thumbnail ── */}
+        <div className={cn('h-52 bg-gradient-to-br relative shrink-0', gradientClass)}>
+          {offer.thumbnail_url && (
+            <img
+              src={offer.thumbnail_url}
+              alt={offer.title}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
           )}
-        </div>
 
-        {/* Star / Favorite toggle */}
-        <button
-          onClick={(e) => { e.stopPropagation(); setStarred(!starred) }}
-          className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/30 hover:bg-black/50 transition-colors cursor-pointer"
-        >
-          <Star
-            className={cn(
-              'w-3.5 h-3.5 transition-colors',
-              starred ? 'fill-yellow-400 text-yellow-400' : 'text-zinc-400'
+          {/* Status badge — top-left */}
+          <div className="absolute top-2 left-2">
+            {winning || offer.is_winning ? (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-yellow-400/80 text-black">
+                💀 Steal
+              </span>
+            ) : offer.status === 'Scaling' ? (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-green-500/80 text-white">
+                Scaling
+              </span>
+            ) : (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-500/80 text-white">
+                New
+              </span>
             )}
-          />
-        </button>
-      </div>
+          </div>
 
-      {/* Card body */}
-      <div className="p-3 space-y-2">
-        {/* Ad count + days running */}
-        <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-          <span className="font-medium text-zinc-300">{offer.ads.toLocaleString()} ads</span>
-          <span>·</span>
-          <Clock className="w-3 h-3" />
-          <span>{offer.days} {offer.days === 1 ? 'day' : 'days'}</span>
+          {/* Metrics overlay — bottom-left */}
+          <div className="absolute bottom-2 left-2 flex flex-col gap-1">
+            <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+              <span className={cn('text-sm font-semibold', todayTextCls)}>
+                ● {today.toLocaleString()}
+              </span>
+              <span className="text-sm font-semibold text-white/70 ml-0.5">today</span>
+            </div>
+            <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+              <span className="text-sm font-semibold text-zinc-400">
+                ● {yesterday.toLocaleString()}
+              </span>
+              <span className="text-sm font-semibold text-zinc-500 ml-0.5">yesterday</span>
+            </div>
+            <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+              <span className={cn('text-sm font-semibold', diffTextCls)}>
+                {diffArrow} {diff >= 0 ? '+' : ''}{diff.toLocaleString()}
+              </span>
+              <span className="text-sm font-semibold text-zinc-500 ml-0.5">daily</span>
+            </div>
+          </div>
         </div>
 
-        {/* Title */}
-        <p className="text-white font-semibold text-sm leading-tight">{offer.title}</p>
+        {/* ── Card body ── */}
+        <div className="p-4 flex flex-col flex-1">
+          <p className="text-base font-semibold text-white leading-snug mb-2 line-clamp-2">
+            {offer.title}
+          </p>
 
-        {/* Platform / Type / Niche tags */}
-        <div className="flex flex-wrap gap-1">
-          {[offer.platform, offer.type, offer.niche].map((tag) => (
-            <span
-              key={tag}
-              className="text-[10px] px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-400"
-            >
-              {tag}
-            </span>
-          ))}
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {[trafficName, typeName, nicheName].filter(Boolean).map((tag) => (
+              <span key={tag} className="text-xs px-2.5 py-1 bg-zinc-800 text-zinc-300 rounded-md">
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-500">{langDisplay}</span>
+            <span className="text-xs text-zinc-600">{days} {days === 1 ? 'day' : 'days'}</span>
+          </div>
+
+          <Link
+            href={`/dashboard/offers/${offer.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="mt-2.5 w-full h-10 text-sm font-medium border border-zinc-700 text-zinc-300 rounded-lg hover:border-yellow-400 hover:text-yellow-400 cursor-pointer transition-all duration-200 flex items-center justify-center"
+          >
+            View Details →
+          </Link>
         </div>
-
-        {/* Language */}
-        <p className="text-xs text-zinc-500">{langMap[offer.lang] ?? offer.lang}</p>
-
-        {/* Winning: View Offer CTA */}
-        {winning && (
-          <button className="w-full mt-1 text-xs font-medium border border-yellow-400/50 text-yellow-400 rounded-lg py-1.5 hover:bg-yellow-400/10 transition-colors cursor-pointer">
-            View Offer →
-          </button>
-        )}
       </div>
-    </div>
+
+      {drawerOpen && (
+        <OfferDrawer offer={offer} winning={winning} onClose={() => setDrawerOpen(false)} />
+      )}
+    </>
   )
 }

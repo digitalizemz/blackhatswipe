@@ -150,7 +150,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
 
             <button
               type="submit"
-              className="w-full font-bold rounded-lg transition-all hover:brightness-110 cursor-pointer"
+              className="w-full font-bold rounded-lg transition-all hover:brightness-110 cursor-pointer disabled:opacity-70 disabled:cursor-wait"
               style={{
                 backgroundColor: '#FACC15',
                 color: '#000000',
@@ -165,7 +165,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
             Already have an account?{' '}
             <Link
               href="/login"
-              className="font-medium transition-all hover:brightness-110"
+              className="font-medium transition-all hover:brightness-110 cursor-pointer"
               style={{ color: '#FACC15' }}
             >
               Sign in

@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { logout } from '@/app/actions/auth'
 import { cn } from '@/lib/utils'
 import {
   Flame,
@@ -18,7 +17,6 @@ import {
   HelpCircle,
   Settings,
   ExternalLink,
-  LogOut,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
@@ -28,9 +26,9 @@ const mainNav = [
   { label: 'All Offers',    href: '/dashboard/offers',        icon: LayoutGrid    },
   { label: 'Steal These',   href: '/dashboard/steal-these',   icon: Trophy        },
   { label: 'My Swipe File', href: '/dashboard/swipe-file',    icon: BookMarked    },
-  { label: 'Templates',     href: '/dashboard/templates',     icon: FileText       },
-  { label: 'Academy',       href: '/dashboard/academy',       icon: GraduationCap  },
-  { label: 'AI Chat',       href: '/dashboard/chat',          icon: MessageSquare  },
+  { label: 'Templates',     href: '/dashboard/templates',     icon: FileText      },
+  { label: 'Academy',       href: '/dashboard/academy',       icon: GraduationCap },
+  { label: 'AI Chat',       href: '/dashboard/chat',          icon: MessageSquare },
 ]
 
 const moreNav = [
@@ -50,8 +48,8 @@ interface NavItemProps {
 
 function NavItem({ label, href, icon: Icon, external, isActive, collapsed }: NavItemProps) {
   const cls = cn(
-    'flex items-center rounded-lg text-sm font-medium transition-colors cursor-pointer border-l-2',
-    collapsed ? 'justify-center py-2.5 w-full' : 'gap-3 px-3 py-2',
+    'flex items-center h-11 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer border-l-2',
+    collapsed ? 'justify-center w-full' : 'gap-3 px-4 mx-2',
     isActive
       ? 'bg-yellow-400/10 border-yellow-400 text-yellow-400'
       : 'border-transparent text-zinc-400 hover:text-white hover:bg-zinc-800/50'
@@ -66,11 +64,11 @@ function NavItem({ label, href, icon: Icon, external, isActive, collapsed }: Nav
         className={cls}
         title={collapsed ? label : undefined}
       >
-        <Icon className="w-4 h-4 shrink-0" />
+        <Icon className="w-5 h-5 flex-shrink-0" />
         {!collapsed && (
           <>
-            <span className="flex-1">{label}</span>
-            <ExternalLink className="w-3 h-3 text-zinc-600" />
+            <span className="flex-1 truncate">{label}</span>
+            <ExternalLink className="w-3 h-3 text-zinc-600 flex-shrink-0" />
           </>
         )}
       </a>
@@ -79,8 +77,8 @@ function NavItem({ label, href, icon: Icon, external, isActive, collapsed }: Nav
 
   return (
     <Link href={href} className={cls} title={collapsed ? label : undefined}>
-      <Icon className="w-4 h-4 shrink-0" />
-      {!collapsed && label}
+      <Icon className="w-5 h-5 flex-shrink-0" />
+      {!collapsed && <span className="truncate">{label}</span>}
     </Link>
   )
 }
@@ -112,22 +110,22 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
     <aside
       className={cn(
         'shrink-0 bg-[#0A0A0A] border-r border-zinc-800/50 flex flex-col min-h-screen transition-all duration-200',
-        collapsed ? 'w-14' : 'w-[240px]'
+        collapsed ? 'w-16' : 'w-[260px]'
       )}
     >
-      {/* Header: logo + collapse toggle */}
+      {/* Logo + collapse toggle */}
       <div
         className={cn(
-          'flex items-center py-5 transition-all',
-          collapsed ? 'justify-center px-0' : 'justify-between px-5'
+          'h-16 flex items-center px-4 border-b border-zinc-800/50 shrink-0',
+          collapsed ? 'justify-center' : 'justify-between'
         )}
       >
         {!collapsed && (
           <Image
             src="/logo-dark.png"
             alt="Logo"
-            width={140}
-            height={36}
+            width={130}
+            height={34}
             style={{ objectFit: 'contain' }}
             priority
           />
@@ -138,17 +136,18 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {collapsed
-            ? <ChevronRight className="w-4 h-4" />
-            : <ChevronLeft className="w-4 h-4" />
+            ? <ChevronRight className="w-5 h-5" />
+            : <ChevronLeft className="w-5 h-5" />
           }
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className={cn('flex-1 pb-4 overflow-y-auto', collapsed ? 'px-1' : 'px-3')}>
-        {/* MAIN section */}
+      <nav className={cn('flex-1 overflow-y-auto py-3', collapsed ? 'px-1' : 'px-0')}>
+
+        {/* MAIN */}
         {!collapsed && (
-          <p className="text-zinc-600 text-[10px] uppercase tracking-widest mt-4 mb-1 px-3">
+          <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-6 mb-1">
             Main
           </p>
         )}
@@ -163,9 +162,9 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
           ))}
         </div>
 
-        {/* MORE section */}
+        {/* MORE */}
         {!collapsed && (
-          <p className="text-zinc-600 text-[10px] uppercase tracking-widest mt-6 mb-1 px-3">
+          <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-6 mb-1">
             More
           </p>
         )}
@@ -181,35 +180,17 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Bottom: user info + logout */}
-      <div
-        className={cn(
-          'py-4 border-t border-zinc-800/50 space-y-2',
-          collapsed ? 'px-1' : 'px-4'
-        )}
-      >
-        {!collapsed && (
-          <div className="flex items-center gap-2 px-3">
-            <p className="text-xs text-zinc-500 truncate flex-1">{userEmail}</p>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-400 font-medium border border-yellow-400/20 capitalize shrink-0">
+      {/* Bottom: user info only */}
+      {!collapsed && (
+        <div className="px-4 py-4 border-t border-zinc-800/50">
+          <div className="flex items-center gap-2">
+            <p className="text-sm text-zinc-500 truncate flex-1">{userEmail}</p>
+            <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-full capitalize shrink-0">
               {userPlan}
             </span>
           </div>
-        )}
-        <form action={logout}>
-          <button
-            type="submit"
-            className={cn(
-              'w-full flex items-center rounded-lg text-sm text-zinc-400 hover:text-white hover:bg-zinc-800/50 transition-colors cursor-pointer',
-              collapsed ? 'justify-center py-2.5' : 'gap-3 px-3 py-2'
-            )}
-            title={collapsed ? 'Sign Out' : undefined}
-          >
-            <LogOut className="w-4 h-4" />
-            {!collapsed && 'Sign Out'}
-          </button>
-        </form>
-      </div>
+        </div>
+      )}
     </aside>
   )
 }

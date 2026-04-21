@@ -32,6 +32,29 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  // Admin route protection
+  if (pathname.startsWith('/admin')) {
+    if (!user) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('plan')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || profile.plan !== 'admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/dashboard/scaling-now'
+      return NextResponse.redirect(url)
+    }
+
+    return supabaseResponse
+  }
+
   // Rotas protegidas
   const protectedRoutes = ['/dashboard']
   const isProtected = protectedRoutes.some((route) => pathname.startsWith(route))
