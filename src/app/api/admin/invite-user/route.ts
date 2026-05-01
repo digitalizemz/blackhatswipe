@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const auth = await requireAdmin()
   if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
 
-  const { email, full_name, phone } = await request.json()
+  const { email, full_name, phone, role = 'user', plan = 'free' } = await request.json()
   if (!email) return Response.json({ error: 'Email is required' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
@@ -25,8 +25,8 @@ export async function POST(request: Request) {
     email,
     full_name: full_name ?? null,
     phone:     phone     ?? null,
-    role:      'user',
-    plan:      'free',
+    role:      role || 'user',
+    plan:      plan || 'free',
   })
 
   return Response.json({ success: true })
