@@ -3,21 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-interface NavItem {
-  label: string
-  href: string
-  icon: string
-}
-
-const navItems: NavItem[] = [
-  { label: 'Overview',        href: '/admin',                 icon: '📊' },
-  { label: 'Offers',          href: '/admin/offers',          icon: '📦' },
-  { label: 'Creatives',       href: '/admin/creatives',       icon: '🎨' },
-  { label: 'Users',           href: '/admin/users',           icon: '👥' },
-  { label: 'Niches',          href: '/admin/niches',          icon: '🏷️' },
-  { label: 'Traffic Sources', href: '/admin/traffic-sources', icon: '🚦' },
-  { label: 'Languages',       href: '/admin/languages',       icon: '🌐' },
-  { label: 'Offer Types',     href: '/admin/offer-types',     icon: '📋' },
+const navItems = [
+  { label: 'Overview', href: '/admin',         icon: '📊' },
+  { label: 'Offers',   href: '/admin/offers',  icon: '📦' },
+  { label: 'Users',    href: '/admin/users',   icon: '👥' },
+  { label: 'Plans',    href: '/admin/plans',   icon: '💳' },
 ]
 
 export default function AdminSidebar() {
@@ -39,13 +29,11 @@ export default function AdminSidebar() {
         <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-5 mb-1">
           Management
         </p>
-
         {navItems.map((item) => {
           const isActive =
             item.href === '/admin'
               ? pathname === '/admin'
               : pathname.startsWith(item.href)
-
           return (
             <Link
               key={item.href}

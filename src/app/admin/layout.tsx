@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 import AdminSidebar from '@/components/admin/admin-sidebar'
 
 export default async function AdminLayout({
@@ -8,25 +9,25 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
+  // Validate session
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect('/login')
-  }
-
-  const { data: profile } = await supabase
+  // Read profile bypassing RLS
+  const adminClient = createAdminClient()
+  const { data: profile } = await adminClient
     .from('profiles')
-    .select('plan')
+    .select('plan, role')
     .eq('id', user.id)
     .single()
 
-  if (!profile || profile.plan !== 'admin') {
-    redirect('/dashboard/scaling-now')
-  }
+  const isAdminOrEditor =
+    profile?.role === 'admin' ||
+    profile?.role === 'editor' ||
+    profile?.plan === 'admin' // legacy
+
+  if (!isAdminOrEditor) redirect('/dashboard/offers')
 
   return (
     <div className="min-h-screen bg-[#000000] flex">
@@ -35,7 +36,7 @@ export default async function AdminLayout({
         <header className="h-16 bg-[#050505] border-b border-[#1A1A1A] flex items-center justify-between px-6 shrink-0">
           <span className="text-sm text-zinc-500">Admin Panel</span>
           <Link
-            href="/dashboard/scaling-now"
+            href="/dashboard/offers"
             className="text-sm text-zinc-400 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5"
           >
             ← Back to App

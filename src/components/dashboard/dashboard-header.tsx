@@ -6,13 +6,9 @@ import { usePathname } from 'next/navigation'
 import { logout } from '@/app/actions/auth'
 
 const pageTitles: Record<string, string> = {
-  '/dashboard/scaling-now': '🔥 Scaling Right Now',
   '/dashboard/offers':      'All Offers',
   '/dashboard/steal-these': 'Steal These',
   '/dashboard/swipe-file':  'My Swipe File',
-  '/dashboard/templates':   'Templates',
-  '/dashboard/academy':     'Academy',
-  '/dashboard/chat':        'AI Chat',
   '/dashboard/support':     'Support',
   '/dashboard/settings':    'Settings',
 }
@@ -24,14 +20,28 @@ function getInitials(email: string): string {
 interface DashboardHeaderProps {
   userEmail: string
   userPlan: string
+  userRole: string
 }
 
-export default function DashboardHeader({ userEmail, userPlan }: DashboardHeaderProps) {
+export default function DashboardHeader({ userEmail, userPlan, userRole }: DashboardHeaderProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
 
   const pageTitle = pageTitles[pathname] ?? 'Dashboard'
+
+  const isAdmin  = userRole === 'admin' || userPlan === 'admin'
+  const isEditor = userRole === 'editor'
+  const isPro    = userPlan === 'pro' || isAdmin || isEditor
+
+  const badgeLabel = isAdmin ? 'Admin' : isEditor ? 'Editor' : isPro ? 'Pro' : 'Free'
+  const badgeCls   = isAdmin
+    ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
+    : isEditor
+    ? 'bg-blue-400/10 text-blue-400 border-blue-400/20'
+    : isPro
+    ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
+    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
 
   useEffect(() => {
     if (!open) return
@@ -63,8 +73,8 @@ export default function DashboardHeader({ userEmail, userPlan }: DashboardHeader
           <div className="absolute top-14 right-0 w-56 bg-[#111111] border border-[#1A1A1A] rounded-xl shadow-xl z-50 overflow-hidden">
             <div className="px-4 py-3 border-b border-[#1A1A1A]">
               <p className="text-zinc-400 text-sm truncate">{userEmail}</p>
-              <span className="inline-flex mt-1.5 text-[11px] px-2 py-0.5 rounded-full bg-yellow-400/10 text-yellow-400 font-medium border border-yellow-400/20 capitalize">
-                {userPlan}
+              <span className={`inline-flex mt-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium border ${badgeCls}`}>
+                {badgeLabel}
               </span>
             </div>
             <div className="py-1">

@@ -5,14 +5,11 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useUpgradeModal } from '@/lib/user-profile-context'
 import {
-  Flame,
   LayoutGrid,
   Trophy,
   BookMarked,
-  FileText,
-  GraduationCap,
-  MessageSquare,
   MessageCircle,
   HelpCircle,
   Settings,
@@ -22,13 +19,9 @@ import {
 } from 'lucide-react'
 
 const mainNav = [
-  { label: 'Scaling Now',   href: '/dashboard/scaling-now',  icon: Flame         },
   { label: 'All Offers',    href: '/dashboard/offers',        icon: LayoutGrid    },
   { label: 'Steal These',   href: '/dashboard/steal-these',   icon: Trophy        },
   { label: 'My Swipe File', href: '/dashboard/swipe-file',    icon: BookMarked    },
-  { label: 'Templates',     href: '/dashboard/templates',     icon: FileText      },
-  { label: 'Academy',       href: '/dashboard/academy',       icon: GraduationCap },
-  { label: 'AI Chat',       href: '/dashboard/chat',          icon: MessageSquare },
 ]
 
 const moreNav = [
@@ -86,10 +79,12 @@ function NavItem({ label, href, icon: Icon, external, isActive, collapsed }: Nav
 interface SidebarProps {
   userEmail: string
   userPlan: string
+  userRole: string
 }
 
-export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
-  const pathname = usePathname()
+export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps) {
+  const pathname   = usePathname()
+  const { show: showUpgrade } = useUpgradeModal()
   const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
@@ -105,6 +100,10 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/')
+
+  const isAdmin  = userRole === 'admin' || userPlan === 'admin'
+  const isEditor = userRole === 'editor'
+  const isPro    = userPlan === 'pro' || isAdmin || isEditor
 
   return (
     <aside
@@ -145,7 +144,6 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
       {/* Navigation */}
       <nav className={cn('flex-1 overflow-y-auto py-3', collapsed ? 'px-1' : 'px-0')}>
 
-        {/* MAIN */}
         {!collapsed && (
           <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-6 mb-1">
             Main
@@ -162,7 +160,6 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
           ))}
         </div>
 
-        {/* MORE */}
         {!collapsed && (
           <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-6 mb-1">
             More
@@ -180,15 +177,35 @@ export default function Sidebar({ userEmail, userPlan }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Bottom: user info only */}
+      {/* Bottom: user info + plan badge */}
       {!collapsed && (
         <div className="px-4 py-4 border-t border-zinc-800/50">
-          <div className="flex items-center gap-2">
-            <p className="text-sm text-zinc-500 truncate flex-1">{userEmail}</p>
-            <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-full capitalize shrink-0">
-              {userPlan}
+          <p className="text-sm text-zinc-500 truncate mb-2">{userEmail}</p>
+          {isAdmin ? (
+            <span className="text-xs px-2 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 rounded-full">
+              Admin
             </span>
-          </div>
+          ) : isEditor ? (
+            <span className="text-xs px-2 py-0.5 bg-blue-400/10 text-blue-400 border border-blue-400/20 rounded-full">
+              Editor
+            </span>
+          ) : isPro ? (
+            <span className="text-xs px-2 py-0.5 bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 rounded-full">
+              Pro
+            </span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-2 py-0.5 bg-zinc-800 text-zinc-400 border border-zinc-700 rounded-full">
+                Free
+              </span>
+              <button
+                onClick={showUpgrade}
+                className="text-xs text-yellow-400 hover:text-yellow-300 cursor-pointer transition-colors font-medium"
+              >
+                Upgrade →
+              </button>
+            </div>
+          )}
         </div>
       )}
     </aside>

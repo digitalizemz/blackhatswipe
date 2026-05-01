@@ -4,7 +4,9 @@ export interface SupabaseOffer {
   description: string | null
   status: string
   is_winning: boolean
+  is_scaling: boolean
   thumbnail_url: string | null
+  vsl_url: string | null
   today_ads: number | null
   yesterday_ads: number | null
   days_running: number | null
@@ -12,15 +14,10 @@ export interface SupabaseOffer {
   offer_type_id: string | null
   language_id: string | null
   traffic_source_id: string | null
-  landing_page_url: string | null
-  back_redirect_url: string | null
-  order_bump_url: string | null
-  upsells: { name: string; url: string }[] | null
-  downsells: { name: string; url: string }[] | null
-  facebook_ad_library_url: string | null
-  tiktok_library_url: string | null
-  youtube_library_url: string | null
+  fb_library_url: string | null
   tags: string[] | null
+  links: { name: string; url: string }[] | null
+  added_by: string | null
   created_at: string
   // joined relations
   niches: { name: string; color: string | null } | null
@@ -32,8 +29,8 @@ export interface SupabaseOffer {
 export interface OfferSnapshot {
   id: string
   offer_id: string
-  ads_count: number
-  snapshotted_at: string
+  ad_count: number
+  snapshot_date: string
 }
 
 export interface OfferFile {

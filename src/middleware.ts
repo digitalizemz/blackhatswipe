@@ -1,10 +1,10 @@
-// src/middleware.ts
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
+  // Anon client — used only to validate the user's session JWT
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -40,33 +40,42 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    const { data: profile } = await supabase
+    // Use service role key so RLS never blocks the profile read
+    const profileClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { cookies: { getAll: () => [], setAll: () => {} } }
+    )
+
+    const { data: profile } = await profileClient
       .from('profiles')
-      .select('plan')
+      .select('plan, role')
       .eq('id', user.id)
       .single()
 
-    if (!profile || profile.plan !== 'admin') {
+    const isAdminOrEditor =
+      profile?.role === 'admin' ||
+      profile?.role === 'editor' ||
+      profile?.plan === 'admin' // legacy
+
+    if (!isAdminOrEditor) {
       const url = request.nextUrl.clone()
-      url.pathname = '/dashboard/scaling-now'
+      url.pathname = '/dashboard/offers'
       return NextResponse.redirect(url)
     }
 
     return supabaseResponse
   }
 
-  // Rotas protegidas
-  const protectedRoutes = ['/dashboard']
-  const isProtected = protectedRoutes.some((route) => pathname.startsWith(route))
+  // Protected dashboard routes
+  const isProtected = pathname.startsWith('/dashboard')
 
-  // Não autenticado + quer entrar em área protegida → redireciona para login
   if (!user && isProtected) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
   }
 
-  // Já autenticado + tenta entrar em login ou signup → redireciona para dashboard
   if (user && (pathname === '/login' || pathname === '/signup')) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'

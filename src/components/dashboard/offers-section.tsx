@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import OfferCard from './offer-card'
+import UpgradeModal from '@/components/ui/upgrade-modal'
+import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
 import type { SupabaseOffer } from '@/types/offer'
 
 // Demo offers kept only as dev reference — never rendered
@@ -22,18 +24,19 @@ const selectClass =
   'bg-[#111111] border border-zinc-800 text-zinc-400 text-sm rounded-lg px-4 h-11 focus:outline-none focus:border-yellow-400 cursor-pointer transition-colors'
 
 interface OffersSectionProps {
-  scalingOnly?: boolean
   winningOnly?: boolean
 }
 
 export default function OffersSection({
-  scalingOnly = false,
   winningOnly = false,
 }: OffersSectionProps) {
-  const supabase = createClient()
+  const supabase    = createClient()
+  const profile     = useUserProfile()
+  const isPro       = userIsPro(profile)
 
   const [offers, setOffers] = useState<SupabaseOffer[]>([])
   const [loading, setLoading] = useState(true)
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   const [niches, setNiches] = useState<FilterOption[]>([])
   const [languages, setLanguages] = useState<FilterOption[]>([])
@@ -46,6 +49,7 @@ export default function OffersSection({
   const [trafficFilter, setTrafficFilter] = useState('All')
   const [nicheFilter, setNicheFilter] = useState('All')
   const [sort, setSort] = useState('Latest')
+  const [scalingFilter, setScalingFilter] = useState(false)
 
   // Load filter options once on mount
   useEffect(() => {
@@ -69,12 +73,11 @@ export default function OffersSection({
 
     let query = supabase
       .from('offers')
-      .select(`*, niches(name, color), languages(name, code, flag_emoji), traffic_sources(name), offer_types(name)`)
+      .select('*')
+      .eq('status', 'active')
 
-    if (scalingOnly) {
-      query = query.eq('status', 'Scaling')
-    } else {
-      query = query.neq('status', 'Paused')
+    if (scalingFilter) {
+      query = query.or('is_scaling.eq.true,today_ads.gte.100')
     }
     if (winningOnly) {
       query = query.eq('is_winning', true)
@@ -91,10 +94,12 @@ export default function OffersSection({
       query = query.order('today_ads', { ascending: false, nullsFirst: false })
     }
 
-    const { data } = await query
+    const { data, error } = await query
+    if (error) console.error('[OffersSection] fetch error:', error)
+    console.log('[OffersSection] fetched:', data?.length ?? 0, 'offers | isPro:', isPro)
     setOffers((data ?? []) as SupabaseOffer[])
     setLoading(false)
-  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, scalingOnly, winningOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, scalingFilter, winningOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchOffers()
@@ -116,6 +121,30 @@ export default function OffersSection({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* Scaling toggle */}
+          <button
+            onClick={() => setScalingFilter(v => !v)}
+            className={`cursor-pointer transition-all flex items-center gap-2 px-4 py-1.5 rounded-full border ${
+              scalingFilter
+                ? 'border-yellow-400 text-yellow-400'
+                : 'border-zinc-700 text-zinc-400'
+            }`}
+          >
+            <span className={`text-sm ${scalingFilter ? 'font-semibold' : ''}`}>🔥 Scaling Now</span>
+            {/* Toggle switch */}
+            <span
+              className={`relative inline-flex w-8 h-4 rounded-full transition-colors duration-200 shrink-0 ${
+                scalingFilter ? 'bg-yellow-400' : 'bg-zinc-700'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${
+                  scalingFilter ? 'translate-x-4' : 'translate-x-0.5'
+                }`}
+              />
+            </span>
+          </button>
+
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={selectClass}>
             <option value="All">Type</option>
             {offerTypes.map((t) => (
@@ -172,6 +201,23 @@ export default function OffersSection({
             </div>
           ))}
         </div>
+      ) : !isPro && winningOnly ? (
+        /* Steal These — full page lock for free users */
+        <div className="flex flex-col items-center justify-center py-28 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-3xl mb-5">
+            🔒
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Pro Access Required</h2>
+          <p className="text-sm text-zinc-400 mb-6 max-w-xs">
+            The Steal These section is available exclusively to Pro members.
+          </p>
+          <button
+            onClick={() => setShowUpgrade(true)}
+            className="px-6 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-lg text-sm transition-all cursor-pointer"
+          >
+            Unlock Pro Access →
+          </button>
+        </div>
       ) : offers.length === 0 ? (
         <div className="text-center py-24 text-zinc-600 text-sm">
           No offers yet. Check back soon.
@@ -179,10 +225,18 @@ export default function OffersSection({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {offers.map((offer) => (
-            <OfferCard key={offer.id} offer={offer} winning={winningOnly} />
+            <OfferCard
+              key={offer.id}
+              offer={offer}
+              winning={winningOnly}
+              locked={!isPro}
+              onLockedClick={() => setShowUpgrade(true)}
+            />
           ))}
         </div>
       )}
+
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </div>
   )
 }

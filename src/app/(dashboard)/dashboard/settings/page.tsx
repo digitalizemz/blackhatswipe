@@ -1,21 +1,29 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 import { redirect } from 'next/navigation'
 import { Settings } from 'lucide-react'
 import { Separator } from '@/components/ui/separator'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
+  // Admin client bypasses RLS to always get the real profile
+  const adminClient = createAdminClient()
+  const { data: profile } = await adminClient
     .from('profiles')
-    .select('*')
+    .select('full_name, plan, role')
     .eq('id', user.id)
     .single()
+
+  const plan = profile?.plan ?? 'free'
+  const role = profile?.role ?? 'user'
+
+  const planLabel =
+    role === 'admin'  ? 'Admin'  :
+    role === 'editor' ? 'Editor' :
+    plan === 'pro'    ? 'Pro'    : 'Free'
 
   return (
     <div className="p-8 max-w-2xl">
@@ -28,7 +36,6 @@ export default async function SettingsPage() {
       </div>
 
       <div className="space-y-6">
-        {/* Account */}
         <div className="rounded-xl border border-zinc-800 bg-[#111111] p-6">
           <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-4">
             Account
@@ -41,21 +48,22 @@ export default async function SettingsPage() {
             <Separator className="bg-zinc-800" />
             <div className="flex justify-between items-center">
               <span className="text-sm text-zinc-400">Full Name</span>
-              <span className="text-sm text-zinc-200">
-                {profile?.full_name ?? '—'}
-              </span>
+              <span className="text-sm text-zinc-200">{profile?.full_name ?? '—'}</span>
             </div>
             <Separator className="bg-zinc-800" />
             <div className="flex justify-between items-center">
               <span className="text-sm text-zinc-400">Plan</span>
-              <span className="inline-flex items-center rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-300 capitalize">
-                {profile?.plan ?? 'free'}
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${
+                role === 'admin' || role === 'editor' || plan === 'pro'
+                  ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
+                  : 'bg-zinc-800 text-zinc-300 border-zinc-700'
+              }`}>
+                {planLabel}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Danger zone placeholder */}
         <div className="rounded-xl border border-zinc-800 bg-[#111111] p-6">
           <h2 className="text-sm font-semibold text-red-500 uppercase tracking-wider mb-4">
             Danger Zone

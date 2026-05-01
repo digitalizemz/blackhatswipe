@@ -1,93 +1,119 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { deleteSwipeItem } from '@/app/actions/swipe'
+import type { SwipeItemRow } from './page'
 
-interface SwipeItem {
-  id: string
-  title: string
-  url: string | null
-  niche: string | null
-  type: string | null
-  notes: string | null
-  created_at: string
-  offer_id: string | null
+const GRADIENTS = [
+  'from-yellow-900 to-zinc-900',
+  'from-blue-900 to-zinc-900',
+  'from-purple-900 to-zinc-900',
+  'from-green-900 to-zinc-900',
+  'from-red-900 to-zinc-900',
+  'from-orange-900 to-zinc-900',
+  'from-pink-900 to-zinc-900',
+  'from-teal-900 to-zinc-900',
+]
+
+function gradientFor(s: string): string {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return GRADIENTS[h % GRADIENTS.length]
 }
 
-export default function SwipeFileClient({ items }: { items: SwipeItem[] }) {
-  const router = useRouter()
+function initials(title: string): string {
+  return title.split(' ').filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('')
+}
+
+export default function SwipeFileClient({ items }: { items: SwipeItemRow[] }) {
+  const router                  = useRouter()
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  async function handleDelete(id: string) {
-    setDeleting(id)
-    await deleteSwipeItem(id)
+  async function handleDelete(swipeId: string, e: React.MouseEvent) {
+    e.stopPropagation()
+    setDeleting(swipeId)
+    await deleteSwipeItem(swipeId)
     setDeleting(null)
     router.refresh()
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 flex flex-col gap-3 hover:border-zinc-700 transition-colors"
-        >
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-white text-sm font-semibold leading-snug line-clamp-2">{item.title}</h3>
-            <button
-              onClick={() => handleDelete(item.id)}
-              disabled={deleting === item.id}
-              className="shrink-0 text-zinc-600 hover:text-red-400 transition-colors text-lg leading-none cursor-pointer disabled:opacity-40"
-              title="Remove"
-            >
-              ×
-            </button>
-          </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {items.map((item) => {
+        const viewHref = item.offer_id
+          ? `/dashboard/offers/${item.offer_id}`
+          : (item.url ?? '#')
+        const isInternal = !!item.offer_id
 
-          <div className="flex flex-wrap gap-1.5">
-            {item.niche && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
-                {item.niche}
-              </span>
-            )}
-            {item.type && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
-                {item.type}
-              </span>
-            )}
-          </div>
+        return (
+          <div
+            key={item.id}
+            className="bg-[#0D0D0D] border border-[#1C1C1C] rounded-xl overflow-hidden hover:border-zinc-700 transition-all duration-200 flex flex-col"
+          >
+            {/* Thumbnail */}
+            <div className={`relative h-52 bg-gradient-to-br ${gradientFor(item.niche ?? item.title)} shrink-0`}>
+              {item.thumbnail_url && (
+                <img
+                  src={item.thumbnail_url}
+                  alt={item.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              )}
+              {!item.thumbnail_url && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-3xl font-bold text-white/20 select-none">{initials(item.title)}</span>
+                </div>
+              )}
 
-          {item.notes && (
-            <p className="text-xs text-zinc-500 line-clamp-2">{item.notes}</p>
-          )}
+              {/* Niche badge — top left */}
+              {item.niche && (
+                <div className="absolute top-2 left-2">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-black/60 text-zinc-300">
+                    {item.niche}
+                  </span>
+                </div>
+              )}
 
-          <div className="flex items-center gap-2 mt-auto pt-1">
-            {item.offer_id && (
-              <Link
-                href={`/dashboard/offers/${item.offer_id}`}
-                className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors font-medium"
+              {/* Remove button — top right */}
+              <button
+                onClick={(e) => handleDelete(item.id, e)}
+                disabled={deleting === item.id}
+                className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/60 hover:bg-red-600 flex items-center justify-center text-white text-xs cursor-pointer disabled:opacity-40 transition-colors z-10"
+                title="Remove from swipe file"
               >
-                View Offer →
-              </Link>
-            )}
-            {item.url && !item.offer_id && (
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                ↗ Open Link
-              </a>
-            )}
-            <span className="text-xs text-zinc-700 ml-auto">
-              {new Date(item.created_at).toLocaleDateString()}
-            </span>
+                ✕
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-4 flex flex-col flex-1">
+              <p className="text-base font-semibold text-white leading-snug mb-3 line-clamp-2">
+                {item.title}
+              </p>
+
+              {isInternal ? (
+                <Link
+                  href={viewHref}
+                  className="mt-auto w-full h-10 text-sm font-medium border border-zinc-700 text-zinc-300 rounded-lg hover:border-yellow-400 hover:text-yellow-400 cursor-pointer transition-all duration-200 flex items-center justify-center"
+                >
+                  View Details →
+                </Link>
+              ) : (
+                <a
+                  href={viewHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-auto w-full h-10 text-sm font-medium border border-zinc-700 text-zinc-300 rounded-lg hover:border-yellow-400 hover:text-yellow-400 transition-all duration-200 flex items-center justify-center"
+                >
+                  Open Link →
+                </a>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

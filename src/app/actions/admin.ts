@@ -2,9 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin-client'
+import { createClient } from '@/lib/supabase/server'
 
 export type OfferStatus = 'Active' | 'Paused' | 'Scaling'
-export type UserPlan = 'free' | 'pro' | 'elite' | 'admin'
+export type UserPlan    = 'free' | 'pro' | 'elite' | 'admin'
+export type UserRole    = 'user' | 'editor' | 'admin'
 
 export interface AdminOffer {
   id?: string
@@ -12,6 +14,7 @@ export interface AdminOffer {
   description?: string
   status: OfferStatus
   is_winning?: boolean
+  is_scaling?: boolean
   thumbnail_url?: string
   niche_id?: string
   sub_niche_id?: string
@@ -32,6 +35,7 @@ export interface AdminOffer {
   save_snapshot?: boolean
   tags?: string[]
   vsl_urls?: string[]
+  links?: { name: string; url: string }[]
 }
 
 export interface AdminCreative {
@@ -176,13 +180,75 @@ export async function deleteCreative(id: string): Promise<{ error?: string }> {
 export async function updateUserPlan(userId: string, plan: UserPlan): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 
-  const { error } = await supabase
-    .from('profiles')
-    .update({ plan })
-    .eq('id', userId)
+  // Capture who is making the change for the audit trail
+  const serverClient = await createClient()
+  const { data: { user: currentUser } } = await serverClient.auth.getUser()
 
+  // Try with audit fields; fall back gracefully if the columns don't exist yet
+  const { error } = await supabase.from('profiles').update({
+    plan,
+    plan_changed_at: new Date().toISOString(),
+    ...(currentUser?.id ? { plan_changed_by: currentUser.id } : {}),
+  }).eq('id', userId)
+
+  if (error) {
+    // Columns may not exist — retry with just the plan
+    const { error: err2 } = await supabase.from('profiles').update({ plan }).eq('id', userId)
+    if (err2) return { error: err2.message }
+  }
+
+  revalidatePath('/admin/users')
+  revalidatePath('/admin/plans')
+  return {}
+}
+
+export async function updateUserRole(userId: string, role: UserRole): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('profiles').update({ role }).eq('id', userId)
   if (error) return { error: error.message }
+  revalidatePath('/admin/users')
+  return {}
+}
 
+export async function updateUserProfile(
+  userId: string,
+  data: { full_name?: string | null; phone?: string | null; plan?: UserPlan; role?: UserRole }
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('profiles').update(data).eq('id', userId)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/users')
+  return {}
+}
+
+export async function deleteUser(userId: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.auth.admin.deleteUser(userId)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/users')
+  return {}
+}
+
+export async function inviteUser(data: {
+  email: string
+  full_name?: string
+  phone?: string
+  role?: UserRole
+  plan?: UserPlan
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { data: invited, error } = await supabase.auth.admin.inviteUserByEmail(data.email)
+  if (error) return { error: error.message }
+  if (invited?.user?.id) {
+    await supabase.from('profiles').upsert({
+      id:        invited.user.id,
+      email:     data.email,
+      full_name: data.full_name ?? null,
+      phone:     data.phone    ?? null,
+      role:      data.role     ?? 'user',
+      plan:      data.plan     ?? 'free',
+    })
+  }
   revalidatePath('/admin/users')
   return {}
 }

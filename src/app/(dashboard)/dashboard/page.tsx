@@ -9,5 +9,5 @@ export default async function DashboardPage() {
 
   if (!user) redirect('/login')
 
-  redirect('/dashboard/scaling-now')
+  redirect('/dashboard/offers')
 }

@@ -4,893 +4,536 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { upsertOffer, type AdminOffer, type OfferStatus } from '@/app/actions/admin'
-
-// ─── types ───────────────────────────────────────────────────────────────────
-
-interface LookupOption {
-  id: string
-  name: string
-  flag_emoji?: string | null
-  color?: string | null
-}
-
-interface UpsellRow {
-  name: string
-  url: string
-}
-
-// ─── shared styles ───────────────────────────────────────────────────────────
+import { ChevronDown } from 'lucide-react'
+import { TrafficIcon } from '@/components/ui/traffic-icon'
 
 const inputCls =
   'bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm w-full ' +
   'focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 ' +
   'placeholder:text-zinc-600 transition-colors duration-150'
 
-const selectCls = inputCls + ' cursor-pointer'
-const labelCls  = 'text-sm font-medium text-zinc-300 mb-1.5 block'
-const cardCls   = 'bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5 mb-4'
+const cardCls = 'bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-5'
 
-// ─── Toggle ──────────────────────────────────────────────────────────────────
+const nicheEmoji: Record<string, string> = {
+  'Weight Loss': '🏋️', 'Memory': '🧠', 'Diabetes': '🩺', 'Prostate': '🫀',
+  'Rejuvenation': '✨', 'Brain': '🧬', 'Erectile Dysfunction': '💊', 'Sexual Health': '❤️',
+  'Pain': '🦴', 'Fungus': '🍄', 'Longevity': '⏳', 'Relationship': '💑',
+  'Melasma': '🌿', 'Oral Health': '🦷', 'Hair Loss': '💇', 'Hypertension': '💓',
+  'Investment': '💰', 'Personal Development': '🌱', 'Travel': '✈️', 'Pet': '🐾',
+  'Maternity': '👶', 'Religion': '🙏', 'Thyroid': '🦋', 'Productivity': '⚡',
+  'Menopause': '🌸', 'Muscle Mass': '💪', 'Vision': '👁️', 'Spirituality': '🕊️',
+  'Anxiety': '😰', 'Skin': '🌟', 'Gut Health': '🫁', 'Joint Pain': '🦵',
+  'Neuropathy': '🧪', 'Prosperity': '🌈', 'Extra Income': '💵', '+18': '🔞', 'Other': '📦',
+}
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+const typeEmoji: Record<string, string> = {
+  'Nutra': '💊', 'Infoproduct': '📚', 'Physical Product': '📦', 'Quiz': '🧩',
+  'Low Ticket': '🏷️', 'Advertorial': '📰', 'Software / SaaS': '💻', 'Other': '📌',
+}
+
+
+function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors cursor-pointer shrink-0 ${
-        checked ? 'bg-yellow-400' : 'bg-zinc-700'
-      }`}
+    <div
+      className="flex items-center justify-between gap-3 p-3 bg-[#111] rounded-lg border border-[#1C1C1C] cursor-pointer select-none"
+      onClick={() => onChange(!value)}
     >
-      <span
-        className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-150 ${
-          checked ? 'left-6' : 'left-1'
-        }`}
-      />
-    </button>
+      <span className="text-sm text-zinc-300">{label}</span>
+      <div className={`relative w-10 h-5 rounded-full transition-colors duration-150 shrink-0 ${value ? 'bg-yellow-400' : 'bg-zinc-700'}`}>
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-150 ${value ? 'left-5' : 'left-0.5'}`} />
+      </div>
+    </div>
   )
 }
 
-// ─── Toast ───────────────────────────────────────────────────────────────────
-
-function Toast({
-  message,
-  type,
-  onHide,
-}: {
-  message: string
-  type: 'success' | 'error'
-  onHide: () => void
-}) {
+function Toast({ message, type, onHide }: { message: string; type: 'success' | 'error'; onHide: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onHide, 3000)
+    const t = setTimeout(onHide, 5000)
     return () => clearTimeout(t)
   }, [onHide])
   return (
     <div
-      className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border ${
+      className={`fixed top-5 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border max-w-sm cursor-pointer ${
         type === 'success'
           ? 'bg-green-900/90 border-green-700/60 text-green-300'
           : 'bg-red-900/90 border-red-700/60 text-red-300'
       }`}
+      onClick={onHide}
     >
       {type === 'success' ? '✓' : '✗'} {message}
     </div>
   )
 }
 
-// ─── LivePreview ─────────────────────────────────────────────────────────────
+interface LinkRow { name: string; url: string }
 
-const GRADIENTS = [
-  'from-blue-900 to-blue-700',
-  'from-purple-900 to-purple-700',
-  'from-green-900 to-green-700',
-  'from-orange-900 to-orange-700',
-  'from-teal-900 to-teal-700',
-  'from-pink-900 to-pink-700',
-  'from-indigo-900 to-indigo-700',
-  'from-amber-900 to-amber-700',
-]
+export default function OfferWizard() {
+  const router   = useRouter()
+  const supabase = createClient()
+  const thumbRef            = useRef<HTMLInputElement>(null)
+  const trafficDropdownRef  = useRef<HTMLDivElement>(null)
+  const nicheDropdownRef    = useRef<HTMLDivElement>(null)
 
-interface LivePreviewProps {
-  title: string
-  thumbnailUrl: string
-  status: OfferStatus
-  isWinning: boolean
-  todayAds: number
-  yesterdayAds: number
-  niche?: LookupOption
-  language?: LookupOption
-  traffic?: LookupOption
-  tags: string[]
-}
+  // Basic info
+  const [title,                setTitle]               = useState('')
+  const [nicheId,              setNicheId]             = useState('')
+  const [nicheSearch,          setNicheSearch]         = useState('')
+  const [showNicheDropdown,    setShowNicheDropdown]   = useState(false)
+  const [languageId,           setLanguageId]          = useState('')
+  const [trafficId,            setTrafficId]           = useState('')
+  const [showTrafficDropdown,  setShowTrafficDropdown] = useState(false)
+  const [offerTypeId, setOfferTypeId]= useState('')
+  const [status,      setStatus]     = useState('active')
+  const [isScaling,   setIsScaling]  = useState(false)
+  const [isWinning,   setIsWinning]  = useState(false)
 
-function LivePreview({
-  title,
-  thumbnailUrl,
-  status,
-  isWinning,
-  todayAds,
-  yesterdayAds,
-  niche,
-  language,
-  traffic,
-  tags,
-}: LivePreviewProps) {
-  const gradientClass = GRADIENTS[(niche?.name?.charCodeAt(0) ?? 0) % GRADIENTS.length]
-  const diff      = todayAds - yesterdayAds
-  const todayCls  = todayAds > yesterdayAds ? 'text-green-400' : todayAds >= yesterdayAds * 0.8 ? 'text-yellow-400' : 'text-red-400'
-  const diffCls   = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-zinc-400'
-  const diffArrow = diff > 0 ? '↗' : diff < 0 ? '↘' : '→'
+  // Cover image
+  const [thumbnailUrl,   setThumbnailUrl]   = useState('')
+  const [thumbTab,       setThumbTab]       = useState<'url' | 'upload'>('url')
+  const [thumbUploading, setThumbUploading] = useState(false)
 
-  const bgStyle =
-    niche?.color && !thumbnailUrl
-      ? { background: `linear-gradient(135deg, ${niche.color}22, ${niche.color}77)` }
-      : undefined
+  // Metrics
+  const [todayAds,     setTodayAds]    = useState<number | ''>(0)
+  const [yesterdayAds, setYesterdayAds]= useState<number | ''>(0)
+  const [daysRunning,  setDaysRunning] = useState<number | ''>(0)
+  const [saveSnapshot, setSaveSnapshot]= useState(false)
 
-  return (
-    <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl overflow-hidden">
-      {/* Thumbnail h-40 */}
-      <div
-        className={`h-40 relative ${!thumbnailUrl ? `bg-gradient-to-br ${gradientClass}` : ''}`}
-        style={bgStyle}
-      >
-        {thumbnailUrl && (
-          <img
-            src={thumbnailUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        )}
+  // Ad Library Links
+  const [adLibraryLinks, setAdLibraryLinks] = useState<LinkRow[]>([{ name: '', url: '' }])
 
-        {/* Status — top-left */}
-        <div className="absolute top-2 left-2">
-          {isWinning ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-yellow-400/80 text-black">
-              💀 Steal
-            </span>
-          ) : status === 'Scaling' ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-green-500/80 text-white">
-              Scaling
-            </span>
-          ) : (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-500/80 text-white">
-              {status}
-            </span>
-          )}
-        </div>
+  // Tags & description
+  const [tags,        setTags]       = useState<string[]>([])
+  const [tagInput,    setTagInput]   = useState('')
+  const [description, setDescription]= useState('')
 
-        {/* Metrics — top-right */}
-        {(todayAds > 0 || yesterdayAds > 0) && (
-          <div className="absolute top-2 right-2 flex flex-col gap-0.5 items-end">
-            <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-              <span className={`text-xs font-semibold ${todayCls}`}>
-                ● {todayAds.toLocaleString()}
-              </span>
-              <span className="text-xs text-white/60">today</span>
-            </div>
-            <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-              <span className={`text-xs font-semibold ${diffCls}`}>
-                {diffArrow} {diff >= 0 ? '+' : ''}{diff.toLocaleString()}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
+  // Lookup options
+  const [niches,     setNiches]     = useState<{ id: string; name: string; color: string | null }[]>([])
+  const [offerTypes, setOfferTypes] = useState<{ id: string; name: string }[]>([])
+  const [langs,      setLangs]      = useState<{ id: string; name: string; flag_emoji: string | null }[]>([])
+  const [traffic,    setTraffic]    = useState<{ id: string; name: string }[]>([])
 
-      {/* Body */}
-      <div className="p-3.5">
-        <p className="text-sm font-semibold text-white leading-snug mb-2 line-clamp-2 min-h-[2.5rem]">
-          {title || <span className="text-zinc-600">Offer title will appear here…</span>}
-        </p>
+  // UI
+  const [saving, setSaving] = useState(false)
+  const [error,  setError]  = useState('')
+  const [toast,  setToast]  = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-2">
-            {tags.slice(0, 4).map((tag) => (
-              <span
-                key={tag}
-                className="text-[10px] px-2 py-0.5 bg-yellow-400/15 text-yellow-400 rounded-md border border-yellow-400/20"
-              >
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap gap-1">
-          {niche && (
-            <span className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-md">
-              {niche.name}
-            </span>
-          )}
-          {language && (
-            <span className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-md">
-              {language.flag_emoji} {language.name}
-            </span>
-          )}
-          {traffic && (
-            <span className="text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-md">
-              {traffic.name}
-            </span>
-          )}
-        </div>
-      </div>
-
-      <p className="text-[10px] text-zinc-600 text-center pb-3 px-3">
-        This is how users will see this offer
-      </p>
-    </div>
-  )
-}
-
-// ─── OfferWizard (main) ───────────────────────────────────────────────────────
-
-interface OfferWizardProps {
-  initialData?: AdminOffer & { tags?: string[] }
-}
-
-export default function OfferWizard({ initialData }: OfferWizardProps) {
-  const router        = useRouter()
-  const supabase      = createClient()
-  const thumbFileRef  = useRef<HTMLInputElement>(null)
-
-  // ── Lookups ──────────────────────────────────────────────────────────────
-  const [niches,        setNiches]        = useState<LookupOption[]>([])
-  const [languages,     setLanguages]     = useState<LookupOption[]>([])
-  const [trafficSrcs,   setTrafficSrcs]   = useState<LookupOption[]>([])
-  const [offerTypes,    setOfferTypes]    = useState<LookupOption[]>([])
-  const [lookupsLoading, setLookupsLoading] = useState(true)
-  const [lookupsError,  setLookupsError]  = useState('')
-
-  // ── Card 1: Basic Info ───────────────────────────────────────────────────
-  const [title,           setTitle]           = useState(initialData?.title ?? '')
-  const [nicheId,         setNicheId]         = useState(initialData?.niche_id ?? '')
-  const [languageId,      setLanguageId]      = useState(initialData?.language_id ?? '')
-  const [trafficSourceId, setTrafficSourceId] = useState(initialData?.traffic_source_id ?? '')
-  const [offerTypeId,     setOfferTypeId]     = useState(initialData?.offer_type_id ?? '')
-  const [status,          setStatus]          = useState<OfferStatus>(initialData?.status ?? 'Active')
-  const [isWinning,       setIsWinning]       = useState(initialData?.is_winning ?? false)
-
-  // ── Card 2: Cover ────────────────────────────────────────────────────────
-  const [coverTab,         setCoverTab]         = useState<'url' | 'upload'>('url')
-  const [thumbnailUrl,     setThumbnailUrl]     = useState(initialData?.thumbnail_url ?? '')
-  const [thumbUploading,   setThumbUploading]   = useState(false)
-
-  // ── Card 3: Ad Metrics ───────────────────────────────────────────────────
-  const [todayAds,     setTodayAds]     = useState(initialData?.today_ads     ?? 0)
-  const [yesterdayAds, setYesterdayAds] = useState(initialData?.yesterday_ads ?? 0)
-  const [daysRunning,  setDaysRunning]  = useState(initialData?.days_running  ?? 0)
-  const [saveSnapshot, setSaveSnapshot] = useState(false)
-
-  // ── Card 4: Funnel & Links ───────────────────────────────────────────────
-  const [landingPageUrl,  setLandingPageUrl]  = useState(initialData?.landing_page_url  ?? '')
-  const [backRedirectUrl, setBackRedirectUrl] = useState(initialData?.back_redirect_url ?? '')
-  const [checkoutUrl,     setCheckoutUrl]     = useState(initialData?.order_bump_url    ?? '')
-  const [orderBumpUrl,    setOrderBumpUrl]    = useState('')
-  const [fbLibraryUrl,    setFbLibraryUrl]    = useState(initialData?.facebook_ad_library_url ?? '')
-  const [tiktokLibraryUrl,setTiktokLibraryUrl]= useState(initialData?.tiktok_library_url ?? '')
-  const [upsells,         setUpsells]         = useState<UpsellRow[]>(initialData?.upsells   ?? [])
-  const [downsells,       setDownsells]       = useState<UpsellRow[]>(initialData?.downsells ?? [])
-
-  // ── Card 5: Tags & Notes ─────────────────────────────────────────────────
-  const [tags,        setTags]        = useState<string[]>(initialData?.tags ?? [])
-  const [tagInput,    setTagInput]    = useState('')
-  const [description, setDescription] = useState(initialData?.description ?? '')
-
-  // ── UI ───────────────────────────────────────────────────────────────────
-  const [saving,  setSaving]  = useState(false)
-  const [errors,  setErrors]  = useState<Record<string, string>>({})
-  const [toast,   setToast]   = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-
-  // ── Load lookups ─────────────────────────────────────────────────────────
   useEffect(() => {
-    async function load() {
-      setLookupsLoading(true)
-      try {
-        const [n, l, ts, ot] = await Promise.all([
-          supabase.from('niches').select('id,name,color').eq('active', true).order('name'),
-          supabase.from('languages').select('id,name,flag_emoji').eq('active', true).order('name'),
-          supabase.from('traffic_sources').select('id,name').eq('active', true).order('name'),
-          supabase.from('offer_types').select('id,name').eq('active', true).order('name'),
-        ])
-        if (n.error || l.error || ts.error || ot.error) throw new Error()
-        setNiches((n.data ?? []) as LookupOption[])
-        setLanguages((l.data ?? []) as LookupOption[])
-        setTrafficSrcs((ts.data ?? []) as LookupOption[])
-        setOfferTypes((ot.data ?? []) as LookupOption[])
-      } catch {
-        setLookupsError('Failed to load options. Refresh the page.')
-      }
-      setLookupsLoading(false)
-    }
-    load()
+    Promise.all([
+      supabase.from('niches').select('id,name,color').eq('active', true).order('name'),
+      supabase.from('offer_types').select('id,name').eq('active', true).order('name'),
+      supabase.from('languages').select('id,name,flag_emoji').eq('active', true).order('name'),
+      supabase.from('traffic_sources').select('id,name').eq('active', true).order('name'),
+    ]).then(([n, ot, l, t]) => {
+      setNiches((n.data ?? []) as typeof niches)
+      setOfferTypes((ot.data ?? []) as typeof offerTypes)
+      setLangs((l.data ?? []) as typeof langs)
+      setTraffic((t.data ?? []) as typeof traffic)
+    })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Thumbnail upload ──────────────────────────────────────────────────────
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (trafficDropdownRef.current && !trafficDropdownRef.current.contains(e.target as Node)) {
+        setShowTrafficDropdown(false)
+      }
+      if (nicheDropdownRef.current && !nicheDropdownRef.current.contains(e.target as Node)) {
+        setShowNicheDropdown(false)
+        setNicheSearch('')
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
   async function handleThumbUpload(file: File) {
     setThumbUploading(true)
-    const ext  = file.name.split('.').pop() ?? 'jpg'
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-    const { error } = await supabase.storage.from('thumbnails').upload(path, file, { upsert: true })
-    if (!error) {
-      const { data } = supabase.storage.from('thumbnails').getPublicUrl(path)
-      setThumbnailUrl(data.publicUrl)
+    const path = `thumbnails/${Date.now()}-${file.name}`
+    const { data, error: err } = await supabase.storage.from('thumbnails').upload(path, file, { upsert: true })
+    if (!err && data) {
+      const { data: { publicUrl } } = supabase.storage.from('thumbnails').getPublicUrl(data.path)
+      setThumbnailUrl(publicUrl)
+    } else if (err) {
+      setToast({ message: err.message.includes('bucket') ? 'Storage not configured.' : err.message, type: 'error' })
     }
     setThumbUploading(false)
   }
 
-  // ── Tags ──────────────────────────────────────────────────────────────────
+  function updateAdLibraryLink(idx: number, field: 'name' | 'url', val: string) {
+    setAdLibraryLinks(adLibraryLinks.map((l, i) => (i === idx ? { ...l, [field]: val } : l)))
+  }
+
   function addTag() {
     const t = tagInput.trim()
-    if (t && !tags.includes(t)) setTags((p) => [...p, t])
+    if (t && !tags.includes(t)) setTags([...tags, t])
     setTagInput('')
   }
 
-  // ── Upsell/downsell helpers ───────────────────────────────────────────────
-  function setUpsellField(i: number, field: keyof UpsellRow, val: string) {
-    setUpsells((prev) => {
-      const next = [...prev]
-      next[i] = { ...next[i], [field]: val }
-      return next
-    })
-  }
-  function setDownsellField(i: number, field: keyof UpsellRow, val: string) {
-    setDownsells((prev) => {
-      const next = [...prev]
-      next[i] = { ...next[i], [field]: val }
-      return next
-    })
-  }
-
-  // ── Validate ──────────────────────────────────────────────────────────────
-  function validate(): boolean {
-    const errs: Record<string, string> = {}
-    if (!title.trim() || title.trim().length < 3) errs.title = 'Title required (min 3 chars)'
-    if (!nicheId) errs.niche = 'Niche required'
-    setErrors(errs)
-    return Object.keys(errs).length === 0
-  }
-
-  // ── Save ──────────────────────────────────────────────────────────────────
   async function handleSave() {
-    if (!validate()) return
+    if (title.trim().length < 3) { setError('Title must be at least 3 characters'); return }
+    if (!nicheId)                 { setError('Please select a niche'); return }
+    setError('')
     setSaving(true)
 
-    // Build combined upsells — include order bump as named row if provided
-    const allUpsells = [
-      ...(orderBumpUrl.trim() ? [{ name: 'Order Bump', url: orderBumpUrl.trim() }] : []),
-      ...upsells.filter((u) => u.url.trim()),
-    ]
-
-    const payload: AdminOffer & { tags?: string[] } = {
-      id:                      initialData?.id,
-      title:                   title.trim(),
-      description:             description.trim() || undefined,
-      status,
-      is_winning:              isWinning,
-      thumbnail_url:           thumbnailUrl || undefined,
-      niche_id:                nicheId || undefined,
-      offer_type_id:           offerTypeId || undefined,
-      language_id:             languageId || undefined,
-      traffic_source_id:       trafficSourceId || undefined,
-      today_ads:               todayAds,
-      yesterday_ads:           yesterdayAds,
-      days_running:            daysRunning,
-      landing_page_url:        landingPageUrl.trim() || undefined,
-      back_redirect_url:       backRedirectUrl.trim() || undefined,
-      order_bump_url:          checkoutUrl.trim() || undefined,
-      facebook_ad_library_url: fbLibraryUrl.trim() || undefined,
-      tiktok_library_url:      tiktokLibraryUrl.trim() || undefined,
-      upsells:                 allUpsells.length > 0 ? allUpsells : undefined,
-      downsells:               downsells.filter((d) => d.url.trim()).length > 0
-                                 ? downsells.filter((d) => d.url.trim())
-                                 : undefined,
-      save_snapshot:           saveSnapshot,
-      tags:                    tags.length > 0 ? tags : undefined,
-    }
-
-    const result = await upsertOffer(payload)
-    setSaving(false)
-
-    if (result.error) {
-      setToast({ message: 'Error saving offer. Try again.', type: 'error' })
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setToast({ message: 'Not authenticated. Please log in.', type: 'error' })
+      setSaving(false)
       return
     }
 
-    setToast({ message: 'Offer saved ✓', type: 'success' })
-    setTimeout(() => {
-      router.push('/admin/offers')
-      router.refresh()
-    }, 900)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const offerObject: any = {
+      title:            title.trim(),
+      status,
+      is_scaling:       isScaling,
+      is_winning:       isWinning,
+      today_ads:        Number(todayAds)     || 0,
+      yesterday_ads:    Number(yesterdayAds) || 0,
+      days_running:     Number(daysRunning)  || 0,
+      ad_library_links: adLibraryLinks.filter((l) => l.name || l.url),
+      tags,
+      added_by:         user.id,
+    }
+
+    if (nicheId)              offerObject.niche_id          = nicheId
+    if (offerTypeId)          offerObject.offer_type_id     = offerTypeId
+    if (languageId)           offerObject.language_id       = languageId
+    if (trafficId)            offerObject.traffic_source_id = trafficId
+    if (thumbnailUrl?.trim()) offerObject.thumbnail_url     = thumbnailUrl.trim()
+    if (description?.trim())  offerObject.description       = description.trim()
+
+    const { data, error: insertErr } = await supabase
+      .from('offers').insert([offerObject]).select().single()
+
+    setSaving(false)
+
+    if (insertErr) {
+      setToast({ message: insertErr.message, type: 'error' })
+      return
+    }
+
+    if (saveSnapshot) {
+      await supabase.from('offer_ad_snapshots').upsert({
+        offer_id:      data.id,
+        ad_count:      Number(todayAds) || 0,
+        snapshot_date: new Date().toISOString().split('T')[0],
+      }, { onConflict: 'offer_id,snapshot_date' })
+    }
+
+    setToast({ message: 'Offer saved! Now add materials →', type: 'success' })
+    setTimeout(() => router.push(`/admin/offers/${data.id}/materials`), 1000)
   }
 
-  // ── Derived for preview ───────────────────────────────────────────────────
-  const selectedNiche    = niches.find((n) => n.id === nicheId)
-  const selectedLanguage = languages.find((l) => l.id === languageId)
-  const selectedTraffic  = trafficSrcs.find((t) => t.id === trafficSourceId)
-
-  // ── Lookup select helper ──────────────────────────────────────────────────
-  function LookupSelect({
-    value,
-    onChange,
-    options,
-    placeholder,
-    error,
-    renderOption,
-  }: {
-    value: string
-    onChange: (v: string) => void
-    options: LookupOption[]
-    placeholder: string
-    error?: string
-    renderOption?: (o: LookupOption) => string
-  }) {
-    if (lookupsLoading)
-      return <div className="h-11 bg-zinc-800/40 rounded-lg animate-pulse" />
-    return (
-      <>
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={`${selectCls} ${error ? 'border-red-500/60' : ''}`}
-        >
-          <option value="">{placeholder}</option>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {renderOption ? renderOption(o) : o.name}
-            </option>
-          ))}
-        </select>
-        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-      </>
-    )
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div>
+    <>
       {toast && <Toast message={toast.message} type={toast.type} onHide={() => setToast(null)} />}
 
-      {lookupsError && (
-        <div className="mb-4 p-3.5 bg-red-900/20 border border-red-800/60 rounded-xl text-sm text-red-400">
-          {lookupsError}
+      {/* Step indicator */}
+      <div className="flex items-center gap-3 mb-8 max-w-3xl mx-auto">
+        <div className="flex items-center">
+          <div className="bg-yellow-400 text-black text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center shrink-0">1</div>
+          <span className="text-sm font-medium text-white ml-2">Details</span>
         </div>
-      )}
+        <div className="flex-1 h-px bg-zinc-800" />
+        <div className="flex items-center opacity-40">
+          <div className="bg-zinc-800 text-zinc-400 text-sm font-bold w-8 h-8 rounded-full flex items-center justify-center shrink-0">2</div>
+          <span className="text-sm text-zinc-500 ml-2">Materials</span>
+        </div>
+      </div>
 
-      {/* ── Two-column layout ── */}
-      <div className="flex gap-6 items-start">
+      <div className="max-w-3xl mx-auto">
 
-        {/* ════ LEFT: form ════ */}
-        <div className="flex-[65] min-w-0">
-
-          {/* ── Card 1: Basic Info ── */}
-          <div className={cardCls}>
-            <h2 className="text-base font-semibold text-white mb-4">Basic Info</h2>
-
-            {/* Title */}
-            <div className="mb-4">
-              <label className={labelCls}>Offer Title *</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ex: Celtic Salt Trick – Vigor Peak"
-                className={`${inputCls} ${errors.title ? 'border-red-500/60' : ''}`}
-              />
-              {errors.title && <p className="text-xs text-red-400 mt-1">{errors.title}</p>}
+        {/* ── Card 1: Basic Info ── */}
+        <div className={cardCls}>
+          <h2 className="text-base font-semibold text-white mb-4">Basic Info</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">Offer Title *</label>
+              <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ex: Celtic Salt Trick – Vigor Peak" className={inputCls} />
             </div>
 
-            {/* 4 dropdowns */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-4 gap-4">
               <div>
-                <label className={labelCls}>Niche *</label>
-                <LookupSelect
-                  value={nicheId}
-                  onChange={setNicheId}
-                  options={niches}
-                  placeholder="Niche"
-                  error={errors.niche}
-                />
+                <label className="block text-xs text-zinc-500 mb-1.5">Niche *</label>
+                <div className="relative" ref={nicheDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowNicheDropdown(!showNicheDropdown)}
+                    className="w-full bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm flex items-center gap-2 cursor-pointer hover:border-zinc-600 transition-colors"
+                  >
+                    {nicheId && niches.find(n => n.id === nicheId) ? (
+                      <span>{nicheEmoji[niches.find(n => n.id === nicheId)!.name] || '📦'} {niches.find(n => n.id === nicheId)!.name}</span>
+                    ) : (
+                      <span className="text-zinc-500">Select niche...</span>
+                    )}
+                    <ChevronDown size={14} className="ml-auto text-zinc-500" />
+                  </button>
+                  {showNicheDropdown && (
+                    <div className="absolute top-12 left-0 right-0 z-50 bg-[#111] border border-[#1C1C1C] rounded-xl shadow-xl overflow-hidden" style={{ maxHeight: '280px' }}>
+                      <div className="p-2 border-b border-[#1C1C1C]">
+                        <input
+                          autoFocus
+                          value={nicheSearch}
+                          onChange={e => setNicheSearch(e.target.value)}
+                          placeholder="Search niche..."
+                          className="w-full bg-[#0D0D0D] border border-[#1C1C1C] text-white text-sm rounded-lg px-3 py-2 outline-none focus:border-yellow-400/50"
+                        />
+                      </div>
+                      <div className="overflow-y-auto" style={{ maxHeight: '220px' }}>
+                        <div
+                          onClick={() => { setNicheId(''); setShowNicheDropdown(false); setNicheSearch('') }}
+                          className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#1A1A1A] cursor-pointer border-b border-[#1C1C1C] text-zinc-500 text-sm"
+                        >Select niche...</div>
+                        {niches.filter(n => n.name.toLowerCase().includes(nicheSearch.toLowerCase())).map(n => (
+                          <div
+                            key={n.id}
+                            onClick={() => { setNicheId(n.id); setShowNicheDropdown(false); setNicheSearch('') }}
+                            className="flex items-center gap-3 px-4 py-2.5 hover:bg-[#1A1A1A] cursor-pointer border-b border-[#1C1C1C] last:border-0 text-sm text-white"
+                          >
+                            <span>{nicheEmoji[n.name] || '📦'}</span>
+                            <span>{n.name}</span>
+                          </div>
+                        ))}
+                        {niches.filter(n => n.name.toLowerCase().includes(nicheSearch.toLowerCase())).length === 0 && (
+                          <div className="px-4 py-3 text-zinc-600 text-sm">No results for &quot;{nicheSearch}&quot;</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               <div>
-                <label className={labelCls}>Language</label>
-                <LookupSelect
-                  value={languageId}
-                  onChange={setLanguageId}
-                  options={languages}
-                  placeholder="Language"
-                  renderOption={(o) => `${o.flag_emoji ?? ''} ${o.name}`.trim()}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Traffic</label>
-                <LookupSelect
-                  value={trafficSourceId}
-                  onChange={setTrafficSourceId}
-                  options={trafficSrcs}
-                  placeholder="Traffic"
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Type</label>
-                <LookupSelect
-                  value={offerTypeId}
-                  onChange={setOfferTypeId}
-                  options={offerTypes}
-                  placeholder="Type"
-                />
-              </div>
-            </div>
-
-            {/* Status + Winning */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Status</label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as OfferStatus)}
-                  className={selectCls}
-                >
-                  <option value="Active">Active</option>
-                  <option value="Scaling">Scaling</option>
-                  <option value="Paused">Paused</option>
+                <label className="block text-xs text-zinc-500 mb-1.5">Type</label>
+                <select value={offerTypeId} onChange={(e) => setOfferTypeId(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                  <option value="">Any type</option>
+                  {offerTypes.map((ot) => (
+                    <option key={ot.id} value={ot.id}>{typeEmoji[ot.name] || '📌'} {ot.name}</option>
+                  ))}
                 </select>
               </div>
-              <div className="flex items-center gap-3 pt-7">
-                <Toggle checked={isWinning} onChange={setIsWinning} />
-                <span className="text-sm text-zinc-300">Winning offer ⭐</span>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Language</label>
+                <select value={languageId} onChange={(e) => setLanguageId(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                  <option value="">Any language</option>
+                  {langs.map((l) => (
+                    <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Traffic Source</label>
+                <div className="relative" ref={trafficDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowTrafficDropdown(!showTrafficDropdown)}
+                    className="w-full bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm flex items-center gap-2 cursor-pointer hover:border-zinc-600 transition-colors"
+                  >
+                    {trafficId && traffic.find(t => t.id === trafficId) ? (
+                      <>
+                        <TrafficIcon name={traffic.find(t => t.id === trafficId)!.name} size={16} />
+                        <span>{traffic.find(t => t.id === trafficId)!.name}</span>
+                      </>
+                    ) : (
+                      <span className="text-zinc-500">Any source</span>
+                    )}
+                    <ChevronDown size={14} className="ml-auto text-zinc-500" />
+                  </button>
+                  {showTrafficDropdown && (
+                    <div className="absolute top-12 left-0 right-0 z-50 bg-[#111] border border-[#1C1C1C] rounded-xl shadow-xl overflow-hidden">
+                      <div
+                        onClick={() => { setTrafficId(''); setShowTrafficDropdown(false) }}
+                        className="flex items-center gap-3 px-4 py-3 hover:bg-[#1A1A1A] cursor-pointer border-b border-[#1C1C1C]"
+                      >
+                        <span className="text-zinc-500 text-sm">Any source</span>
+                      </div>
+                      {traffic.map(ts => (
+                        <div
+                          key={ts.id}
+                          onClick={() => { setTrafficId(ts.id); setShowTrafficDropdown(false) }}
+                          className="flex items-center gap-3 px-4 py-3 hover:bg-[#1A1A1A] cursor-pointer border-b border-[#1C1C1C] last:border-0"
+                        >
+                          <TrafficIcon name={ts.name} size={18} />
+                          <span className="text-sm text-white">{ts.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs text-zinc-500 mb-1.5">Status</label>
+                <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                  <option value="active">Active</option>
+                  <option value="scaling">Scaling</option>
+                  <option value="paused">Paused</option>
+                </select>
+              </div>
+              <div className="flex flex-col justify-end">
+                <Toggle label="⚡ Scaling"   value={isScaling} onChange={setIsScaling} />
+              </div>
+              <div className="flex flex-col justify-end">
+                <Toggle label="💀 Modelable" value={isWinning} onChange={setIsWinning} />
               </div>
             </div>
           </div>
+        </div>
 
-          {/* ── Card 2: Cover ── */}
-          <div className={cardCls}>
-            <h2 className="text-base font-semibold text-white mb-4">Cover</h2>
-
-            {/* Tab switcher */}
-            <div className="flex gap-1 mb-4 bg-[#111111] border border-[#1C1C1C] p-1 rounded-lg w-fit">
-              {(['url', 'upload'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setCoverTab(tab)}
-                  className={`px-4 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-all ${
-                    coverTab === tab
-                      ? 'bg-zinc-700 text-white'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  {tab === 'url' ? 'URL' : 'Upload'}
-                </button>
-              ))}
+        {/* ── Card 2: Cover Image ── */}
+        <div className={cardCls}>
+          <h2 className="text-base font-semibold text-white mb-4">Cover Image</h2>
+          <div className="flex gap-1 mb-4">
+            {(['url', 'upload'] as const).map((tab) => (
+              <button key={tab} onClick={() => setThumbTab(tab)}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${thumbTab === tab ? 'bg-yellow-400 text-black' : 'text-zinc-400 hover:text-white'}`}
+              >{tab === 'url' ? 'URL' : 'Upload'}</button>
+            ))}
+          </div>
+          {thumbTab === 'url' ? (
+            <div>
+              <input type="url" value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.target.value)} placeholder="https://…" className={inputCls} />
+              {thumbnailUrl && <img src={thumbnailUrl} alt="Preview" className="mt-3 w-full max-h-48 object-cover rounded-lg" />}
             </div>
-
-            {coverTab === 'url' ? (
-              <input
-                type="url"
-                value={thumbnailUrl}
-                onChange={(e) => setThumbnailUrl(e.target.value)}
-                placeholder="https://..."
-                className={inputCls}
+          ) : (
+            <div>
+              <input ref={thumbRef} type="file" accept="image/*" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleThumbUpload(f) }}
               />
-            ) : (
-              <div
-                onClick={() => thumbFileRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer transition-colors min-h-[120px] ${
-                  thumbnailUrl
-                    ? 'border-yellow-400/30 bg-yellow-400/5'
-                    : 'border-zinc-800 hover:border-zinc-600'
-                }`}
+              <div onClick={() => thumbRef.current?.click()}
+                className="border-2 border-dashed border-zinc-700 rounded-xl p-8 text-center cursor-pointer hover:border-yellow-400/50 transition-colors"
               >
-                {thumbUploading ? (
-                  <p className="text-sm text-zinc-400">Uploading…</p>
-                ) : thumbnailUrl ? (
-                  <img
-                    src={thumbnailUrl}
-                    alt=""
-                    className="max-h-32 rounded-lg object-contain"
-                  />
-                ) : (
+                {thumbUploading ? <p className="text-sm text-zinc-400">Uploading…</p> : (
                   <>
-                    <span className="text-3xl mb-2 leading-none">☁</span>
-                    <p className="text-sm text-zinc-400">Click to upload</p>
-                    <p className="text-xs text-zinc-600 mt-1">JPG, PNG, WebP, MP4</p>
+                    <p className="text-sm text-zinc-400 mb-1">Click to upload or drag & drop</p>
+                    <p className="text-xs text-zinc-600">JPG, PNG, WEBP supported</p>
                   </>
                 )}
               </div>
-            )}
-
-            <input
-              ref={thumbFileRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,video/mp4"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0]
-                if (file) handleThumbUpload(file)
-                if (e.target) e.target.value = ''
-              }}
-            />
-
-            {thumbnailUrl && (
-              <div className="mt-3 flex items-center gap-2.5">
-                <img
-                  src={thumbnailUrl}
-                  alt=""
-                  className="w-14 h-9 object-cover rounded-md border border-zinc-800 shrink-0"
-                />
-                <span className="text-xs text-zinc-500 flex-1 truncate min-w-0">
-                  {thumbnailUrl}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setThumbnailUrl('')}
-                  className="text-xs text-zinc-600 hover:text-red-400 cursor-pointer transition-colors shrink-0"
-                >
-                  × Remove
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Card 3: Ad Metrics ── */}
-          <div className={cardCls}>
-            <h2 className="text-base font-semibold text-white mb-4">Ad Metrics</h2>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              {(
-                [
-                  ['Today Ads',     todayAds,     setTodayAds],
-                  ['Yesterday Ads', yesterdayAds, setYesterdayAds],
-                  ['Days Running',  daysRunning,  setDaysRunning],
-                ] as [string, number, (v: number) => void][]
-              ).map(([label, val, setter]) => (
-                <div key={label}>
-                  <label className={labelCls}>{label}</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={val}
-                    onChange={(e) => setter(Number(e.target.value))}
-                    className={inputCls}
-                  />
-                </div>
-              ))}
+              {thumbnailUrl && !thumbUploading && <img src={thumbnailUrl} alt="Preview" className="mt-3 w-full max-h-48 object-cover rounded-lg" />}
             </div>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={saveSnapshot}
-                onChange={(e) => setSaveSnapshot(e.target.checked)}
-                className="w-4 h-4 rounded accent-yellow-400 cursor-pointer"
-              />
-              <span className="text-sm text-zinc-400">Save as today&apos;s snapshot</span>
-            </label>
-          </div>
-
-          {/* ── Card 4: Funnel & Links ── */}
-          <div className={cardCls}>
-            <h2 className="text-base font-semibold text-white mb-4">Funnel & Links</h2>
-
-            <div className="space-y-3 mb-5">
-              {(
-                [
-                  ['Landing Page URL',      landingPageUrl,   setLandingPageUrl],
-                  ['Back Redirect URL',     backRedirectUrl,  setBackRedirectUrl],
-                  ['Checkout URL',          checkoutUrl,      setCheckoutUrl],
-                  ['Order Bump URL',        orderBumpUrl,     setOrderBumpUrl],
-                  ['Facebook Ad Library URL', fbLibraryUrl,  setFbLibraryUrl],
-                  ['TikTok Library URL',    tiktokLibraryUrl, setTiktokLibraryUrl],
-                ] as [string, string, (v: string) => void][]
-              ).map(([label, val, setter]) => (
-                <div key={label}>
-                  <label className={labelCls}>{label}</label>
-                  <input
-                    type="url"
-                    value={val}
-                    onChange={(e) => setter(e.target.value)}
-                    placeholder="https://..."
-                    className={inputCls}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {/* Upsells */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <label className={`${labelCls} !mb-0`}>Upsells</label>
-                <button
-                  type="button"
-                  onClick={() => setUpsells((p) => [...p, { name: '', url: '' }])}
-                  className="text-xs text-yellow-400 hover:text-yellow-300 cursor-pointer transition-colors"
-                >
-                  + Add Upsell
-                </button>
-              </div>
-              <div className="space-y-2">
-                {upsells.map((u, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={u.name}
-                      onChange={(e) => setUpsellField(i, 'name', e.target.value)}
-                      placeholder="Name"
-                      className={`${inputCls} w-[30%]`}
-                    />
-                    <input
-                      type="url"
-                      value={u.url}
-                      onChange={(e) => setUpsellField(i, 'url', e.target.value)}
-                      placeholder="https://..."
-                      className={`${inputCls} flex-1`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setUpsells(upsells.filter((_, idx) => idx !== i))}
-                      className="text-zinc-600 hover:text-red-400 cursor-pointer text-xl leading-none w-6 shrink-0 transition-colors"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Downsells */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className={`${labelCls} !mb-0`}>Downsells</label>
-                <button
-                  type="button"
-                  onClick={() => setDownsells((p) => [...p, { name: '', url: '' }])}
-                  className="text-xs text-yellow-400 hover:text-yellow-300 cursor-pointer transition-colors"
-                >
-                  + Add Downsell
-                </button>
-              </div>
-              <div className="space-y-2">
-                {downsells.map((d, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={d.name}
-                      onChange={(e) => setDownsellField(i, 'name', e.target.value)}
-                      placeholder="Name"
-                      className={`${inputCls} w-[30%]`}
-                    />
-                    <input
-                      type="url"
-                      value={d.url}
-                      onChange={(e) => setDownsellField(i, 'url', e.target.value)}
-                      placeholder="https://..."
-                      className={`${inputCls} flex-1`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setDownsells(downsells.filter((_, idx) => idx !== i))}
-                      className="text-zinc-600 hover:text-red-400 cursor-pointer text-xl leading-none w-6 shrink-0 transition-colors"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Card 5: Tags & Notes ── */}
-          <div className={cardCls}>
-            <h2 className="text-base font-semibold text-white mb-4">Tags & Notes</h2>
-
-            <div className="mb-4">
-              <label className={labelCls}>Tags</label>
-              <div className="flex gap-2 mb-2.5">
-                <input
-                  type="text"
-                  value={tagInput}
-                  onChange={(e) => setTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); addTag() }
-                  }}
-                  placeholder="Type tag + Enter"
-                  className={`${inputCls} flex-1`}
-                />
-                <button
-                  type="button"
-                  onClick={addTag}
-                  className="h-11 px-4 text-sm border border-zinc-700 text-zinc-300 rounded-lg hover:border-zinc-500 hover:text-white cursor-pointer transition-all shrink-0"
-                >
-                  Add
-                </button>
-              </div>
-              {tags.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="flex items-center gap-1 bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-md px-2.5 py-1 text-xs"
-                    >
-                      {tag}
-                      <button
-                        type="button"
-                        onClick={() => setTags(tags.filter((t) => t !== tag))}
-                        className="text-yellow-400/50 hover:text-yellow-400 cursor-pointer leading-none"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className={labelCls}>Description</label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Notes about this offer, angle, observations…"
-                rows={4}
-                className="bg-[#111111] border border-[#1C1C1C] text-white text-sm rounded-lg px-4 py-3 w-full focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 transition-colors resize-none"
-              />
-            </div>
-          </div>
-
-          {/* Bottom spacer for fixed bar */}
-          <div className="h-2" />
-        </div>
-
-        {/* ════ RIGHT: live preview ════ */}
-        <div className="flex-[35] sticky top-4 shrink-0">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-3">
-            Live Preview
-          </p>
-          <LivePreview
-            title={title}
-            thumbnailUrl={thumbnailUrl}
-            status={status}
-            isWinning={isWinning}
-            todayAds={todayAds}
-            yesterdayAds={yesterdayAds}
-            niche={selectedNiche}
-            language={selectedLanguage}
-            traffic={selectedTraffic}
-            tags={tags}
-          />
-        </div>
-      </div>
-
-      {/* ── Fixed bottom bar ── */}
-      <div className="fixed bottom-0 left-[260px] right-0 bg-[#0D0D0D] border-t border-[#1A1A1A] px-6 py-4 flex justify-between items-center z-20">
-        <div>
-          {initialData?.id && (
-            <p className="text-xs text-zinc-600">Editing existing offer</p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <Link
-            href="/admin/offers"
-            className="h-10 px-5 text-sm border border-zinc-700 text-zinc-400 rounded-lg hover:border-zinc-500 hover:text-white cursor-pointer transition-all flex items-center"
+
+        {/* ── Card 3: Ad Metrics ── */}
+        <div className={cardCls}>
+          <h2 className="text-base font-semibold text-white mb-4">Ad Metrics</h2>
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">Today Ads</label>
+              <input type="number" min={0} value={todayAds}
+                onChange={(e) => setTodayAds(e.target.value === '' ? '' : Number(e.target.value))} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">Yesterday Ads</label>
+              <input type="number" min={0} value={yesterdayAds}
+                onChange={(e) => setYesterdayAds(e.target.value === '' ? '' : Number(e.target.value))} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs text-zinc-500 mb-1.5">Days Running</label>
+              <input type="number" min={0} value={daysRunning}
+                onChange={(e) => setDaysRunning(e.target.value === '' ? '' : Number(e.target.value))} className={inputCls} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <input type="checkbox" checked={saveSnapshot} onChange={(e) => setSaveSnapshot(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 accent-yellow-400" />
+            <span className="text-sm text-zinc-400">💾 Save as today&apos;s snapshot</span>
+          </label>
+        </div>
+
+        {/* ── Card 4: Ad Library Links ── */}
+        <div className={cardCls}>
+          <div className="mb-4">
+            <h2 className="text-base font-semibold text-white">📚 Ad Library Links</h2>
+            <p className="text-sm text-zinc-500 mt-0.5">Links used by n8n to monitor active ads automatically</p>
+          </div>
+          <div className="space-y-2 mb-3">
+            {adLibraryLinks.map((link, idx) => (
+              <div key={idx} className="flex gap-3 items-center">
+                <input type="text" value={link.name}
+                  onChange={(e) => updateAdLibraryLink(idx, 'name', e.target.value)}
+                  placeholder="Ex: Facebook Library Page 01"
+                  className="bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm focus:outline-none focus:border-yellow-400/50 placeholder:text-zinc-600 transition-colors flex-[35] min-w-0"
+                />
+                <input type="url" value={link.url}
+                  onChange={(e) => updateAdLibraryLink(idx, 'url', e.target.value)}
+                  placeholder="https://www.facebook.com/ads/library/..."
+                  className="bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm focus:outline-none focus:border-yellow-400/50 placeholder:text-zinc-600 transition-colors flex-[55] min-w-0"
+                />
+                <button onClick={() => setAdLibraryLinks(adLibraryLinks.filter((_, i) => i !== idx))}
+                  className="text-zinc-600 hover:text-red-400 cursor-pointer text-xl leading-none transition-colors shrink-0 w-8 text-center"
+                >×</button>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => setAdLibraryLinks([...adLibraryLinks, { name: '', url: '' }])}
+            className="border border-dashed border-zinc-700 text-zinc-400 hover:border-yellow-400/50 hover:text-yellow-400 w-full py-2.5 rounded-lg text-sm transition-colors cursor-pointer"
           >
-            Cancel
-          </Link>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="bg-yellow-400 text-black font-bold h-10 px-6 rounded-lg hover:brightness-110 cursor-pointer transition-all text-sm disabled:opacity-50 flex items-center gap-2"
-          >
-            {saving ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                Saving…
-              </>
-            ) : (
-              'Save Offer'
+            + Add Library Link
+          </button>
+          <p className="text-xs text-zinc-500 mt-2 px-1">
+            ⚡ These links are used by n8n to fetch ad counts daily. Only add Facebook Ad Library URLs here.
+          </p>
+        </div>
+
+        {/* ── Card 5: Tags & Description ── */}
+        <div className={cardCls}>
+          <h2 className="text-base font-semibold text-white mb-4">Tags &amp; Description</h2>
+
+          <div className="mb-5">
+            <label className="block text-xs text-zinc-500 mb-2">Tags</label>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {tags.map((tag) => (
+                  <span key={tag} className="bg-yellow-400/20 text-yellow-400 border border-yellow-400/30 rounded-md px-2.5 py-1 text-xs flex items-center gap-1">
+                    {tag}
+                    <button onClick={() => setTags(tags.filter((t) => t !== tag))} className="hover:text-white transition-colors cursor-pointer leading-none">×</button>
+                  </span>
+                ))}
+              </div>
             )}
+            <div className="flex gap-2">
+              <input type="text" value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+                placeholder="Add a tag…"
+                className={`${inputCls} flex-1`}
+              />
+              <button onClick={addTag}
+                className="px-4 h-11 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 text-sm cursor-pointer transition-colors border border-zinc-700 shrink-0"
+              >Add</button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs text-zinc-500 mb-1.5">Description</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Notes, angle, observations about this offer…"
+              rows={5}
+              className="bg-[#111111] border border-[#1C1C1C] text-white rounded-lg px-4 py-3 text-sm w-full focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 transition-colors duration-150 resize-none"
+            />
+          </div>
+        </div>
+
+      </div>
+
+      {/* ── Sticky Bottom Bar ── */}
+      <div className="sticky bottom-0 bg-[#0D0D0D] border-t border-[#1A1A1A] px-6 py-4 flex justify-between items-center z-10">
+        <div>{error && <p className="text-sm text-red-400">{error}</p>}</div>
+        <div className="flex items-center gap-3">
+          <Link href="/admin/offers"
+            className="border border-zinc-700 text-zinc-400 h-10 px-5 rounded-lg cursor-pointer hover:border-zinc-500 hover:text-white transition-colors flex items-center text-sm"
+          >Cancel</Link>
+          <button onClick={handleSave} disabled={saving}
+            className="bg-yellow-400 text-black font-bold h-10 px-6 rounded-lg cursor-pointer hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed transition-all text-sm"
+          >
+            {saving ? 'Saving…' : 'Save & Continue →'}
           </button>
         </div>
       </div>
-    </div>
+    </>
   )
 }

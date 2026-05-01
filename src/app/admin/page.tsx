@@ -36,7 +36,7 @@ export default async function AdminOverviewPage() {
     { data: recentOffers },
   ] = await Promise.all([
     supabase.from('offers').select('*', { count: 'exact', head: true }),
-    supabase.from('creatives').select('*', { count: 'exact', head: true }),
+    supabase.from('offer_files').select('*', { count: 'exact', head: true }),
     supabase.from('profiles').select('*', { count: 'exact', head: true }),
     supabase
       .from('offers')
