@@ -18,11 +18,22 @@ export default async function DashboardLayout({
 
   // Read the profile with the admin client so RLS never blocks it
   const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
+  const { data: profile, error: profileError } = await adminClient
     .from('profiles')
     .select('plan, role, full_name')
     .eq('id', user.id)
     .single()
+
+  if (profileError) {
+    console.error('[DashboardLayout] profile fetch failed — user will see Free defaults')
+    console.error('  user.id  :', user.id)
+    console.error('  error    :', profileError.message)
+  }
+  console.log('[DashboardLayout] profile row:', {
+    user_id: user.id,
+    plan:    profile?.plan ?? '(null → defaulting to free)',
+    role:    profile?.role ?? '(null → defaulting to user)',
+  })
 
   const plan = profile?.plan ?? 'free'
   const role = profile?.role ?? 'user'

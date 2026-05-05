@@ -7,41 +7,26 @@ import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
 import UpgradeModal from '@/components/ui/upgrade-modal'
-import {
-  AreaChart, Area, XAxis, YAxis,
-  CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Range = '7d' | '15d' | '30d' | '3m'
-
-interface SnapshotRow {
-  offer_id:      string
-  snapshot_date: string
-  snapshot_hour: number
-  ad_count:      number
-}
-
-interface ChartPoint {
-  label:      string
-  ads:        number
-  date?:      string
-  hour?:      number
-  peak_hour?: number
-  delta?:     number
-  isPeak?:    boolean
-}
-
 interface OfferFile {
-  id:          string
-  offer_id:    string
-  folder_name: string
-  file_name:   string
-  file_url:    string
-  file_type:   string | null
-  file_size:   number | null
-  created_at:  string
+  id:              string
+  offer_id:        string
+  folder_name:     string
+  file_name:       string
+  file_url:        string
+  file_type:       string | null
+  file_size:       number | null
+  created_at:      string
+  post_url:        string | null
+  views:           number | null
+  likes:           number | null
+  comments:        number | null
+  scrape_status:   'no_url' | 'active' | 'inactive' | 'paused' | null
+  last_scraped_at: string | null
+  cpm_estimated:   number | null
+  target_market:   string | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -63,112 +48,277 @@ function fileIcon(type: string | null): string {
   return '📎'
 }
 
-function formatDate(d: string) {
-  return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function formatViews(n: number | null): string {
+  if (!n) return '0'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return n.toString()
 }
 
-function subtractDays(n: number) {
-  const d = new Date()
-  d.setDate(d.getDate() - n)
-  return d.toISOString().split('T')[0]
+function formatLastScraped(iso: string | null): string {
+  if (!iso) return 'Never'
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// ─── Y-axis tick helper ───────────────────────────────────────────────────────
-
-function getNiceYTicks(data: ChartPoint[]): number[] {
-  if (!data.length) return [0]
-  const max = Math.max(...data.map(p => p.ads))
-  if (max === 0) return [0]
-  const rawStep = max / 5
-  const exp     = Math.floor(Math.log10(rawStep))
-  const base    = Math.pow(10, exp)
-  const step    = ([1, 2, 5, 10] as number[]).map(m => m * base).find(s => s >= rawStep) ?? base * 10
-  const top     = Math.ceil(max / step) * step
-  const ticks: number[] = []
-  for (let v = 0; v <= top; v += step) ticks.push(v)
-  return ticks
+function formatCurrency(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`
+  if (n >= 100) return `$${n.toFixed(0)}`
+  return `$${n.toFixed(2)}`
 }
 
-// ─── Chart data builder ───────────────────────────────────────────────────────
+// ─── Creative card ────────────────────────────────────────────────────────────
 
-function getDailyPoints(rows: SnapshotRow[], fromDate: string): ChartPoint[] {
-  const byDate = new Map<string, SnapshotRow[]>()
-  for (const r of rows) {
-    if (r.snapshot_date < fromDate) continue
-    if (!byDate.has(r.snapshot_date)) byDate.set(r.snapshot_date, [])
-    byDate.get(r.snapshot_date)!.push(r)
-  }
-  const sorted = Array.from(byDate.entries()).sort((a, b) => a[0].localeCompare(b[0]))
-  if (!sorted.length) return []
-
-  let maxAds = 0
-  const daily = sorted.map(([date, dateRows]) => {
-    const best = dateRows.reduce((b, r) => (r.ad_count > b.ad_count ? r : b))
-    if (best.ad_count > maxAds) maxAds = best.ad_count
-    return { date, ads: best.ad_count, peak_hour: best.snapshot_hour }
-  })
-
-  return daily.map((p, i) => ({
-    label:     formatDate(p.date),
-    ads:       p.ads,
-    date:      p.date,
-    peak_hour: p.peak_hour,
-    delta:     i > 0 ? p.ads - daily[i - 1].ads : undefined,
-    isPeak:    p.ads === maxAds && maxAds > 0,
-  }))
+const SCRAPE_STATUS_CLS: Record<string, string> = {
+  active:   'text-green-400 bg-green-400/10 border-green-400/20',
+  inactive: 'text-red-400 bg-red-400/10 border-red-400/20',
+  paused:   'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+  no_url:   'text-zinc-500 bg-zinc-800 border-zinc-700',
 }
 
-// ─── Custom chart components ──────────────────────────────────────────────────
+function CreativeCard({ creative, onClick }: { creative: OfferFile; onClick: () => void }) {
+  const parts   = creative.file_name.split(' | ')
+  const name    = parts[0] || 'Creative'
+  const ytId    = extractYouTubeId(creative.file_url)
+  const isImage = creative.file_type === 'image' || /\.(jpg|jpeg|png|webp|gif)$/i.test(creative.file_url)
+  const isVideo = !!(creative.file_type === 'video' || /\.(mp4|mov|webm)$/i.test(creative.file_url))
+  const views   = creative.views ?? 0
+  const status  = creative.scrape_status
 
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: { payload: ChartPoint }[] }) {
-  if (!active || !payload?.length) return null
-  const pt = payload[0].payload
+  const typeLabel = (ytId || isVideo) ? 'VIDEO' : isImage ? 'IMAGE' : 'FILE'
+  const typeCls   = typeLabel === 'VIDEO' ? 'bg-blue-500/80 text-white'
+                  : typeLabel === 'IMAGE' ? 'bg-purple-500/80 text-white'
+                  : 'bg-zinc-700/80 text-zinc-300'
+  const dotCls    = status === 'active'   ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.9)]'
+                  : status === 'inactive' ? 'bg-red-400'
+                  : status === 'paused'   ? 'bg-yellow-400'
+                  : status === 'no_url'   ? 'bg-zinc-600'
+                  : null
+
   return (
     <div
-      className="rounded-lg shadow-xl p-3 text-xs min-w-[160px]"
-      style={{ background: '#111827', border: '1px solid #374151' }}
+      className="bg-[#111] border border-zinc-800 rounded-xl overflow-hidden cursor-pointer hover:border-yellow-400/40 hover:scale-[1.02] transition-all duration-200 group"
+      onClick={onClick}
     >
-      <p className="font-semibold text-white mb-2">{pt.label}</p>
-      <div className="flex items-baseline justify-between gap-4 mb-1.5">
-        <span style={{ color: '#9ca3af' }}>Active Ads</span>
-        <span className="text-yellow-400 font-bold text-sm">{pt.ads.toLocaleString()}</span>
-      </div>
-      {pt.delta !== undefined && (
-        <div className="flex items-center justify-between gap-4 mb-1.5">
-          <span style={{ color: '#9ca3af' }}>vs prev day</span>
-          <span className={
-            pt.delta > 0 ? 'text-green-400 font-semibold' :
-            pt.delta < 0 ? 'text-red-400 font-semibold'   : 'font-medium'
-          } style={pt.delta === 0 ? { color: '#6b7280' } : undefined}>
-            {pt.delta > 0 ? `▲ +${pt.delta.toLocaleString()}` :
-             pt.delta < 0 ? `▼ ${pt.delta.toLocaleString()}`  : '= 0'}
+      <div className="aspect-[4/3] relative bg-zinc-900">
+        {/* Status dot */}
+        {dotCls && (
+          <div className={`absolute top-2 right-2 z-10 w-2.5 h-2.5 rounded-full ${dotCls}`} />
+        )}
+
+        {/* Views overlay */}
+        {views > 0 && (
+          <div className="absolute top-2 left-2 z-10 bg-black/70 backdrop-blur-sm rounded-md px-2 py-0.5">
+            <span className="text-xs font-semibold text-white">👁 {formatViews(views)}</span>
+          </div>
+        )}
+
+        {/* Media */}
+        {ytId ? (
+          <>
+            <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition-colors">
+              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <span className="text-base ml-0.5">▶</span>
+              </div>
+            </div>
+          </>
+        ) : isImage ? (
+          <img src={creative.file_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+        ) : isVideo ? (
+          <>
+            <video src={creative.file_url} muted preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition-colors">
+              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <span className="text-base ml-0.5">▶</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-4xl opacity-40">🎬</span>
+          </div>
+        )}
+
+        {/* Bottom gradient + name + type badge */}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-2.5 pt-8 pb-2.5 flex items-end justify-between">
+          <p className="text-sm font-semibold text-white truncate flex-1 mr-2 leading-tight drop-shadow">{name}</p>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide shrink-0 leading-tight ${typeCls}`}>
+            {typeLabel}
           </span>
         </div>
-      )}
-      {pt.peak_hour !== undefined && (
-        <p className="pt-1.5 mt-1" style={{ color: '#6b7280', borderTop: '1px solid #1f2937' }}>
-          Last updated at {pt.peak_hour}h
-        </p>
-      )}
+      </div>
     </div>
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function renderDot(props: any): JSX.Element {
-  const { cx, cy, payload, index } = props as { cx: number; cy: number; payload: ChartPoint; index: number }
-  if (payload.isPeak) {
-    return (
-      <g key={`peak-${index}`}>
-        <circle cx={cx} cy={cy} r={14} fill="#FACC15" opacity={0.10} />
-        <circle cx={cx} cy={cy} r={6}  fill="#FACC15" stroke="#000" strokeWidth={1.5} />
-        <text x={cx} y={cy - 14} textAnchor="middle" fill="#FACC15" fontSize={11} fontWeight={700}>
-          {payload.ads.toLocaleString()}
-        </text>
-      </g>
-    )
-  }
-  return <circle key={`dot-${index}`} cx={cx} cy={cy} r={3} fill="#FACC15" opacity={0.55} />
+// ─── Creative modal ───────────────────────────────────────────────────────────
+
+function CreativeModal({ creative, onClose }: { creative: OfferFile; onClose: () => void }) {
+  const ytId    = extractYouTubeId(creative.file_url)
+  const isImage = creative.file_type === 'image' || /\.(jpg|jpeg|png|webp|gif)$/i.test(creative.file_url)
+  const isVideo = !!(creative.file_type === 'video' || /\.(mp4|mov|webm)$/i.test(creative.file_url))
+  const parts    = creative.file_name.split(' | ')
+  const name     = parts[0] || 'Creative'
+  const angle    = parts[1] || ''
+  const status   = creative.scrape_status ?? 'no_url'
+  const modalViews    = creative.views ?? 0
+  const cpm      = creative.cpm_estimated ?? 0
+  const estSpend = cpm > 0 && modalViews > 0 ? (modalViews / 1000) * cpm : null
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#1A1A1A] shrink-0">
+          <div>
+            <p className="text-sm font-semibold text-white">{name}</p>
+            {angle && <p className="text-xs text-zinc-500 mt-0.5">{angle}</p>}
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-2xl leading-none cursor-pointer transition-colors">×</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+
+          {/* Preview — left 60% */}
+          <div className="flex-[60] bg-zinc-950 flex items-center justify-center overflow-hidden">
+            {ytId ? (
+              <div className="relative w-full" style={{ paddingBottom: '56.25%' }}>
+                <iframe
+                  src={`https://www.youtube.com/embed/${ytId}`}
+                  className="absolute inset-0 w-full h-full"
+                  allowFullScreen
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                />
+              </div>
+            ) : isImage ? (
+              <img src={creative.file_url} alt={name} className="max-w-full max-h-[70vh] object-contain" />
+            ) : isVideo ? (
+              <video src={creative.file_url} controls className="max-w-full max-h-[70vh]" />
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-zinc-600 p-8">
+                <span className="text-6xl opacity-30">🎬</span>
+                <p className="text-sm">Preview not available</p>
+                <a href={creative.file_url} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-yellow-400 hover:underline">Open file →</a>
+              </div>
+            )}
+          </div>
+
+          {/* Details — right 40% */}
+          <div className="flex-[40] border-l border-[#1A1A1A] p-5 overflow-y-auto space-y-4">
+
+            {/* Stats */}
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                ['👁', 'Views',    creative.views    ?? 0],
+                ['❤️', 'Likes',    creative.likes    ?? 0],
+                ['💬', 'Comments', creative.comments ?? 0],
+              ] as [string, string, number][]).map(([emoji, label, val]) => (
+                <div key={label} className="bg-[#111] rounded-xl p-2.5 text-center">
+                  <p className="text-sm font-bold text-white tabular-nums">{val.toLocaleString()}</p>
+                  <p className="text-[10px] text-zinc-500 mt-0.5">{emoji} {label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Spend Estimate */}
+            <div className="bg-[#111] rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500">CPM</span>
+                <span className="text-sm font-semibold text-white">
+                  {cpm > 0 ? `$${cpm.toFixed(2)}` : 'Not set'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-widest text-zinc-500">Est. Spend</span>
+                <span className={`text-sm font-semibold ${estSpend ? 'text-green-400' : 'text-zinc-600'}`}>
+                  {estSpend ? formatCurrency(estSpend) : '—'}
+                </span>
+              </div>
+              {estSpend && (
+                <p className="text-[10px] text-zinc-600 pt-0.5 border-t border-zinc-800">
+                  ({(modalViews / 1000).toFixed(1)}k views ÷ 1000) × ${cpm.toFixed(2)} CPM
+                </p>
+              )}
+            </div>
+
+            {/* ROI Estimate */}
+            {estSpend && (
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">ROI Estimate</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-emerald-950/40 border border-emerald-800/30 rounded-lg p-2.5 text-center">
+                    <p className="text-sm font-bold text-emerald-400">{formatCurrency(estSpend * 2)}</p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">at 2× ROI</p>
+                  </div>
+                  <div className="bg-emerald-950/40 border border-emerald-800/30 rounded-lg p-2.5 text-center">
+                    <p className="text-sm font-bold text-emerald-400">{formatCurrency(estSpend * 3)}</p>
+                    <p className="text-[10px] text-zinc-500 mt-0.5">at 3× ROI</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-zinc-600 mt-1.5">Based on typical DR ROI range</p>
+              </div>
+            )}
+
+            {/* Target Market + Scrape Status badges */}
+            <div className="flex flex-wrap gap-2">
+              {creative.target_market && (
+                <span className="text-xs px-2.5 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                  {creative.target_market}
+                </span>
+              )}
+              <span className={`text-xs px-2.5 py-1 rounded-full border capitalize ${SCRAPE_STATUS_CLS[status] ?? SCRAPE_STATUS_CLS.no_url}`}>
+                {status.replace('_', ' ')}
+              </span>
+            </div>
+
+            {/* Last scraped */}
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Last Scraped</p>
+              <p className="text-sm text-zinc-400">{formatLastScraped(creative.last_scraped_at)}</p>
+            </div>
+
+            {/* Actions */}
+            <div className="space-y-2 pt-1">
+              <a
+                href={creative.file_url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full h-10 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg transition-all text-sm font-medium"
+              >
+                ↓ Download Creative
+              </a>
+              {creative.post_url && (
+                <a
+                  href={creative.post_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full h-10 border border-zinc-700 text-zinc-400 rounded-lg hover:border-yellow-400/50 hover:text-yellow-400 transition-all text-sm"
+                >
+                  ↗ View Native Post
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -194,18 +344,6 @@ function Toast({ message, type, onHide }: { message: string; type: 'success' | '
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-const RANGE_LABEL: Record<Range, string> = {
-  '7d': '7 Days', '15d': '15 Days', '30d': '30 Days', '3m': '3 Months',
-}
-
-const RANGE_DAYS: Record<Range, number> = {
-  '7d': 7, '15d': 15, '30d': 30, '3m': 90,
-}
-
-const TICK_INTERVAL: Record<Range, number> = {
-  '7d': 0, '15d': 2, '30d': 4, '3m': 13,
-}
-
 export default function OfferDetailPage() {
   const { id }   = useParams<{ id: string }>()
   const supabase = createClient()
@@ -215,11 +353,10 @@ export default function OfferDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [offer,     setOffer]     = useState<any>(null)
   const [allFiles,  setAllFiles]  = useState<OfferFile[]>([])
-  const [snapshots, setSnapshots] = useState<SnapshotRow[]>([])
   const [loading,   setLoading]   = useState(true)
 
-  const [selectedVslIndex, setSelectedVslIndex] = useState(0)
-  const [range,            setRange]            = useState<Range>('7d')
+  const [selectedVslIndex,  setSelectedVslIndex]  = useState(0)
+  const [selectedCreative, setSelectedCreative] = useState<OfferFile | null>(null)
   const [openFolders,      setOpenFolders]      = useState<Record<string, boolean>>({})
   const [toast,            setToast]            = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [showUpgrade,      setShowUpgrade]      = useState(!isPro)
@@ -234,23 +371,12 @@ export default function OfferDetailPage() {
       supabase
         .from('offer_files').select('*')
         .eq('offer_id', id).order('created_at'),
-      supabase
-        .from('library_snapshots')
-        .select('offer_id,snapshot_date,snapshot_hour,ad_count')
-        .eq('offer_id', id)
-        .gte('snapshot_date', subtractDays(90))
-        .order('snapshot_date')
-        .order('snapshot_hour'),
-    ]).then(([offerRes, filesRes, snapsRes]) => {
+    ]).then(([offerRes, filesRes]) => {
       if (offerRes.data) setOffer(offerRes.data)
       setAllFiles((filesRes.data ?? []) as OfferFile[])
-      setSnapshots((snapsRes.data ?? []) as SnapshotRow[])
       setLoading(false)
     })
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Chart data ──────────────────────────────────────────────────────────────
-  const chartData: ChartPoint[] = getDailyPoints(snapshots, subtractDays(RANGE_DAYS[range]))
 
   async function handleSaveSwipe() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -267,6 +393,7 @@ export default function OfferDetailPage() {
         niche:         offer.niches?.name ?? '',
         notes:         '',
       })
+    void offerLinks
     if (error) setToast({ message: error.message, type: 'error' })
     else       setToast({ message: 'Saved ✓', type: 'success' })
   }
@@ -306,7 +433,7 @@ export default function OfferDetailPage() {
         </div>
         <h2 className="text-xl font-bold text-white mb-2">Pro Access Required</h2>
         <p className="text-sm text-zinc-400 mb-6 max-w-xs">
-          Upgrade to Pro to view offer details, creatives, VSLs and full performance data.
+          Upgrade to Pro to view offer details, creatives, VSLs and full data.
         </p>
         <div className="flex gap-3">
           <button
@@ -335,34 +462,18 @@ export default function OfferDetailPage() {
   const adLibraryLinks: { name: string; url: string }[] = offer.ad_library_links || []
   const offerLinks:     { name: string; url: string }[] = offer.links || []
 
-  const today     = offer.today_ads     ?? 0
-  const yesterday = offer.yesterday_ads ?? 0
-  const days      = offer.days_running  ?? 0
-  const diff      = today - yesterday
+  const totalViews = offer.total_views ?? 0
+  const dailySpend = offer.estimated_daily_spend ?? 0
 
-  const todayColorCls = today > yesterday ? 'text-green-400' : today >= yesterday * 0.8 ? 'text-yellow-400' : 'text-red-400'
-  const diffCls       = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-yellow-400'
-
-  // Peak & 7-day avg from snapshot data
-  const peakAds = (() => {
-    const byDate = new Map<string, number>()
-    for (const r of snapshots) {
-      byDate.set(r.snapshot_date, Math.max(byDate.get(r.snapshot_date) ?? 0, r.ad_count))
-    }
-    return byDate.size > 0 ? Math.max(...Array.from(byDate.values())) : 0
-  })()
-
-  const avg7d = (() => {
-    const from = subtractDays(7)
-    const byDate = new Map<string, number>()
-    for (const r of snapshots) {
-      if (r.snapshot_date < from) continue
-      byDate.set(r.snapshot_date, Math.max(byDate.get(r.snapshot_date) ?? 0, r.ad_count))
-    }
-    if (!byDate.size) return 0
-    const vals = Array.from(byDate.values())
-    return Math.round(vals.reduce((s, v) => s + v, 0) / vals.length)
-  })()
+  // Offer Intelligence — computed from already-fetched creatives
+  const intelTotalViews  = creatives.reduce((s, c) => s + (c.views ?? 0), 0)
+  const cpmsWithValue    = creatives.filter(c => (c.cpm_estimated ?? 0) > 0)
+  const intelAvgCpm      = cpmsWithValue.length > 0
+    ? cpmsWithValue.reduce((s, c) => s + (c.cpm_estimated ?? 0), 0) / cpmsWithValue.length
+    : 0
+  const intelActiveCount = creatives.filter(c => c.scrape_status === 'active').length
+  const intelHasData     = intelTotalViews > 0
+  const intelAvgViews    = creatives.length > 0 ? Math.round(intelTotalViews / creatives.length) : 0
 
   const nicheName   = offer.niches?.name          ?? null
   const nicheColor  = offer.niches?.color         ?? '#facc15'
@@ -443,9 +554,6 @@ export default function OfferDetailPage() {
               }`}>
                 {offer.status}
               </span>
-              {offer.is_scaling && (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-yellow-400/20 text-yellow-400 border border-yellow-400/30">⚡ Scaling</span>
-              )}
               {offer.is_winning && (
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-zinc-700/50 text-zinc-400 border border-zinc-600/30">💀 Modelable</span>
               )}
@@ -484,63 +592,18 @@ export default function OfferDetailPage() {
           </div>
 
           {/* Creatives */}
-          {creatives.length > 0 && (
-            <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4">
-              <h2 className="text-base font-semibold text-white mb-3">🎬 Creatives</h2>
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4">
+            <h2 className="text-base font-semibold text-white mb-3">🎬 Creatives</h2>
+            {creatives.length === 0 ? (
+              <p className="text-sm text-zinc-600 py-4 text-center">No creatives added yet</p>
+            ) : (
               <div className="grid grid-cols-2 gap-3">
-                {creatives.map(c => {
-                  const parts  = c.file_name.split(' | ')
-                  const cname  = parts[0] || 'Creative'
-                  const cangle = parts[1] || ''
-                  const ytId   = extractYouTubeId(c.file_url)
-                  const mtype  = ytId ? 'youtube'
-                    : (c.file_type === 'image' || /\.(jpg|jpeg|png|webp|gif)$/i.test(c.file_url)) ? 'image'
-                    : (c.file_type === 'video' || /\.(mp4|mov)$/i.test(c.file_url)) ? 'video'
-                    : 'unknown'
-                  return (
-                    <div
-                      key={c.id}
-                      className="bg-[#111] border border-zinc-800 rounded-xl overflow-hidden cursor-pointer hover:border-zinc-600 transition-colors"
-                      onClick={() => window.open(c.file_url, '_blank')}
-                    >
-                      <div className="h-36 bg-zinc-900 relative flex items-center justify-center">
-                        {mtype === 'youtube' && ytId ? (
-                          <>
-                            <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={cname} className="absolute inset-0 w-full h-full object-cover" />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                                <span className="text-xl">▶</span>
-                              </div>
-                            </div>
-                          </>
-                        ) : mtype === 'video' ? (
-                          <>
-                            <video src={c.file_url} muted preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
-                                <span className="text-xl">▶</span>
-                              </div>
-                            </div>
-                          </>
-                        ) : mtype === 'image' ? (
-                          <img src={c.file_url} alt={cname} className="absolute inset-0 w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-3xl">🎬</span>
-                        )}
-                      </div>
-                      <div className="p-3">
-                        <p className="text-sm font-semibold text-white truncate">{cname}</p>
-                        {cangle && <p className="text-xs text-zinc-500 truncate mt-0.5">{cangle}</p>}
-                        {c.file_type && (
-                          <span className="inline-block text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded mt-1">{c.file_type}</span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
+                {creatives.map(c => (
+                  <CreativeCard key={c.id} creative={c} onClick={() => setSelectedCreative(c)} />
+                ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Other Folders (read-only, collapsible) */}
           {folders.length > 0 && (
@@ -642,102 +705,70 @@ export default function OfferDetailPage() {
         {/* ── RIGHT COLUMN (45%) sticky ── */}
         <div className="flex-[45] min-w-0 space-y-4 sticky top-20">
 
-          {/* Performance */}
-          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
-            <h2 className="text-base font-semibold text-white mb-4">📊 Performance</h2>
-
-            {/* Stats grid — 3 cols × 2 rows */}
-            <div className="grid grid-cols-3 gap-1.5 mb-3">
-              {([
-                ['Today',         today.toLocaleString(),                             todayColorCls],
-                ['Yesterday',     yesterday.toLocaleString(),                         'text-white'],
-                ['Daily Change',  `${diff >= 0 ? '+' : ''}${diff.toLocaleString()}`,  diffCls],
-                ['Days Running',  days.toString(),                                    'text-white'],
-                ['Peak (all-time)', peakAds > 0 ? peakAds.toLocaleString() : '—',    'text-yellow-400'],
-                ['Avg 7d',        avg7d > 0    ? avg7d.toLocaleString()    : '—',    'text-white'],
-              ] as [string, string, string][]).map(([label, value, cls]) => (
-                <div key={label} className="bg-[#111] rounded-lg px-2 py-1.5">
-                  <p className="text-[10px] mb-0.5 leading-none" style={{ color: '#9ca3af' }}>{label}</p>
-                  <p className={`text-sm font-bold tabular-nums ${cls}`}>{value}</p>
+          {/* Offer Intelligence */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4">
+            <h2 className="text-sm font-semibold text-white mb-3">📊 Offer Intelligence</h2>
+            {!intelHasData ? (
+              <p className="text-xs text-zinc-600 italic py-1">
+                📡 Scraping not configured yet — add native post URLs to creatives
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-[#111] rounded-lg p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Total Creatives</p>
+                  <p className="text-lg font-semibold text-white tabular-nums">{creatives.length}</p>
                 </div>
-              ))}
-            </div>
-
-            {/* Range tabs */}
-            <div className="flex gap-1 mb-4">
-              {(['7d', '15d', '30d', '3m'] as Range[]).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    range === r
-                      ? 'bg-yellow-400 text-black'
-                      : 'border border-[#374151] text-[#9ca3af] hover:border-yellow-400 hover:text-white'
-                  }`}
-                >
-                  {RANGE_LABEL[r]}
-                </button>
-              ))}
-            </div>
-
-            {/* Area chart */}
-            {chartData.length > 0 ? (() => {
-              const yTicks = getNiceYTicks(chartData)
-              return (
-                <div style={{ minHeight: '280px' }}>
-                  <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart
-                      data={chartData}
-                      margin={{ top: 10, right: 10, left: 35, bottom: 25 }}
-                    >
-                      <defs>
-                        <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%"   stopColor="#FACC15" stopOpacity={0.30} />
-                          <stop offset="100%" stopColor="#FACC15" stopOpacity={0}    />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid
-                        strokeDasharray="4 4"
-                        stroke="#1f2937"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="label"
-                        tick={{ fill: '#9ca3af', fontSize: 12 }}
-                        tickLine={false}
-                        axisLine={false}
-                        interval={TICK_INTERVAL[range]}
-                      />
-                      <YAxis
-                        ticks={yTicks}
-                        domain={[0, yTicks[yTicks.length - 1]]}
-                        tick={{ fill: '#9ca3af', fontSize: 11 }}
-                        tickLine={false}
-                        axisLine={false}
-                        width={40}
-                      />
-                      <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#374151', strokeWidth: 1 }} />
-                      <Area
-                        type="monotone"
-                        dataKey="ads"
-                        stroke="#FACC15"
-                        strokeWidth={2.5}
-                        fill="url(#areaGradient)"
-                        dot={renderDot}
-                        activeDot={{ r: 6, fill: '#FACC15', stroke: '#000', strokeWidth: 1.5 }}
-                        isAnimationActive
-                        animationDuration={400}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                <div className="bg-[#111] rounded-lg p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Total Views</p>
+                  <p className="text-lg font-semibold text-yellow-400 tabular-nums">{formatViews(intelTotalViews)}</p>
                 </div>
-              )
-            })() : (
-              <div style={{ minHeight: '280px' }} className="flex items-center justify-center">
-                <p className="text-xs text-zinc-600">No snapshot data for this period</p>
+                <div className="bg-[#111] rounded-lg p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Avg CPM</p>
+                  <p className="text-lg font-semibold text-white tabular-nums">
+                    {intelAvgCpm > 0 ? `$${intelAvgCpm.toFixed(2)}` : '—'}
+                  </p>
+                </div>
+                <div className="bg-[#111] rounded-lg p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Est. Daily Spend</p>
+                  <p className="text-lg font-semibold text-green-400 tabular-nums">
+                    {dailySpend > 0 ? `~${formatCurrency(dailySpend)}` : '—'}
+                  </p>
+                </div>
+                <div className="bg-[#111] rounded-lg p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Active Scraping</p>
+                  <p className="text-lg font-semibold text-white tabular-nums">
+                    {intelActiveCount}
+                    <span className="text-xs text-zinc-500 font-normal">/{creatives.length}</span>
+                  </p>
+                </div>
+                <div className="bg-[#111] rounded-lg p-2.5">
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Avg Views/Creative</p>
+                  <p className="text-lg font-semibold text-white tabular-nums">{formatViews(intelAvgViews)}</p>
+                </div>
               </div>
             )}
           </div>
+
+          {/* Metrics */}
+          {(totalViews > 0 || dailySpend > 0) && (
+            <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+              <h2 className="text-base font-semibold text-white mb-4">📊 Metrics</h2>
+              <div className={`grid gap-3 ${totalViews > 0 && dailySpend > 0 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                {totalViews > 0 && (
+                  <div className="bg-[#111] rounded-lg px-4 py-3 text-center">
+                    <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Total Views</p>
+                    <p className="text-xl font-bold text-white">👁 {totalViews.toLocaleString()}</p>
+                  </div>
+                )}
+                {dailySpend > 0 && (
+                  <div className="bg-[#111] rounded-lg px-4 py-3 text-center">
+                    <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1">Est. Daily Spend</p>
+                    <p className="text-xl font-bold text-green-400">~${dailySpend.toLocaleString()}/day</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
@@ -761,6 +792,10 @@ export default function OfferDetailPage() {
 
         </div>
       </div>
+
+      {selectedCreative && (
+        <CreativeModal creative={selectedCreative} onClose={() => setSelectedCreative(null)} />
+      )}
     </div>
   )
 }

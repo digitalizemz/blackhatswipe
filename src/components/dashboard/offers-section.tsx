@@ -18,7 +18,7 @@ interface FilterOption {
   color?: string | null
 }
 
-const sortOptions = ['Latest', 'Most Scaled', 'Most Ads']
+const sortOptions = ['Latest', 'Most Views']
 
 const selectClass =
   'bg-[#111111] border border-zinc-800 text-zinc-400 text-sm rounded-lg px-4 h-11 focus:outline-none focus:border-yellow-400 cursor-pointer transition-colors'
@@ -49,7 +49,6 @@ export default function OffersSection({
   const [trafficFilter, setTrafficFilter] = useState('All')
   const [nicheFilter, setNicheFilter] = useState('All')
   const [sort, setSort] = useState('Latest')
-  const [scalingFilter, setScalingFilter] = useState(false)
 
   // Load filter options once on mount
   useEffect(() => {
@@ -73,12 +72,9 @@ export default function OffersSection({
 
     let query = supabase
       .from('offers')
-      .select('*')
+      .select('*, niches(name, color), languages(name, code, flag_emoji), traffic_sources(name), offer_types(name), offer_files(id, folder_name)')
       .eq('status', 'active')
 
-    if (scalingFilter) {
-      query = query.or('is_scaling.eq.true,today_ads.gte.100')
-    }
     if (winningOnly) {
       query = query.eq('is_winning', true)
     }
@@ -88,10 +84,10 @@ export default function OffersSection({
     if (typeFilter !== 'All') query = query.eq('offer_type_id', typeFilter)
     if (search) query = query.ilike('title', `%${search}%`)
 
-    if (sort === 'Latest') {
-      query = query.order('created_at', { ascending: false })
+    if (sort === 'Most Views') {
+      query = query.order('total_views', { ascending: false, nullsFirst: false })
     } else {
-      query = query.order('today_ads', { ascending: false, nullsFirst: false })
+      query = query.order('created_at', { ascending: false })
     }
 
     const { data, error } = await query
@@ -99,7 +95,7 @@ export default function OffersSection({
     console.log('[OffersSection] fetched:', data?.length ?? 0, 'offers | isPro:', isPro)
     setOffers((data ?? []) as SupabaseOffer[])
     setLoading(false)
-  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, scalingFilter, winningOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchOffers()
@@ -121,30 +117,6 @@ export default function OffersSection({
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* Scaling toggle */}
-          <button
-            onClick={() => setScalingFilter(v => !v)}
-            className={`cursor-pointer transition-all flex items-center gap-2 px-4 py-1.5 rounded-full border ${
-              scalingFilter
-                ? 'border-yellow-400 text-yellow-400'
-                : 'border-zinc-700 text-zinc-400'
-            }`}
-          >
-            <span className={`text-sm ${scalingFilter ? 'font-semibold' : ''}`}>🔥 Scaling Now</span>
-            {/* Toggle switch */}
-            <span
-              className={`relative inline-flex w-8 h-4 rounded-full transition-colors duration-200 shrink-0 ${
-                scalingFilter ? 'bg-yellow-400' : 'bg-zinc-700'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform duration-200 ${
-                  scalingFilter ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
-              />
-            </span>
-          </button>
-
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={selectClass}>
             <option value="All">Type</option>
             {offerTypes.map((t) => (

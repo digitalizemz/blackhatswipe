@@ -28,12 +28,6 @@ function deriveGradient(id: string): string {
   return gradientMap[gradientKeys[num % gradientKeys.length]]
 }
 
-function todayColor(today: number, yesterday: number): 'green' | 'yellow' | 'red' {
-  if (today > yesterday) return 'green'
-  if (today >= yesterday * 0.8) return 'yellow'
-  return 'red'
-}
-
 interface OfferCardProps {
   offer: SupabaseOffer
   winning?: boolean
@@ -44,20 +38,10 @@ interface OfferCardProps {
 export default function OfferCard({ offer, winning = false, locked = false, onLockedClick }: OfferCardProps) {
   const router = useRouter()
 
-  const today     = offer.today_ads ?? 0
-  const yesterday = offer.yesterday_ads ?? 0
-  const days      = offer.days_running ?? 0
-
-  const gradientClass = deriveGradient(offer.id)
-  const color   = todayColor(today, yesterday)
-  const diff    = today - yesterday
-
-  const todayTextCls =
-    color === 'green'  ? 'text-green-400' :
-    color === 'yellow' ? 'text-yellow-400' :
-                         'text-red-400'
-  const diffTextCls = diff > 0 ? 'text-green-400' : diff < 0 ? 'text-red-400' : 'text-zinc-400'
-  const diffArrow   = diff > 0 ? '↗' : diff < 0 ? '↘' : '→'
+  const gradientClass  = deriveGradient(offer.id)
+  const creativesCount = (offer.offer_files ?? []).filter(f => f.folder_name === '__creatives__').length
+  const totalViews     = offer.total_views ?? 0
+  const dailySpend     = offer.estimated_daily_spend ?? 0
 
   const nicheName   = offer.niches?.name ?? ''
   const typeName    = offer.offer_types?.name ?? ''
@@ -91,14 +75,6 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
             <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-yellow-400/80 text-black">
               💀 Steal
             </span>
-          ) : offer.is_scaling ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-orange-500/80 text-white">
-              🔥 Scaling
-            </span>
-          ) : (today ?? 0) >= 100 ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-green-600/80 text-white">
-              📈 100+ Ads
-            </span>
           ) : (
             <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-500/80 text-white">
               New
@@ -106,7 +82,7 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
           )}
         </div>
 
-        {/* Lock icon — top-right (free users only) */}
+        {/* Lock icon — top-right */}
         {locked && (
           <div className="absolute top-2 right-2 z-10 text-lg leading-none select-none">
             🔒
@@ -117,35 +93,25 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
         <div className="absolute bottom-2 left-2 flex flex-col gap-1">
           {locked ? (
             <>
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className="text-sm font-semibold text-zinc-500">● ??</span>
-                <span className="text-sm font-semibold text-white/50 ml-0.5">today</span>
+              <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+                <span className="text-sm font-semibold text-zinc-500">👁 ??</span>
               </div>
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className="text-sm font-semibold text-zinc-600">● ??</span>
-                <span className="text-sm font-semibold text-zinc-600 ml-0.5">yesterday</span>
+              <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+                <span className="text-sm font-semibold text-zinc-600">~$??/day</span>
               </div>
             </>
           ) : (
             <>
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className={cn('text-sm font-semibold', todayTextCls)}>
-                  ● {today.toLocaleString()}
-                </span>
-                <span className="text-sm font-semibold text-white/70 ml-0.5">today</span>
-              </div>
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className="text-sm font-semibold text-zinc-400">
-                  ● {yesterday.toLocaleString()}
-                </span>
-                <span className="text-sm font-semibold text-zinc-500 ml-0.5">yesterday</span>
-              </div>
-              <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className={cn('text-sm font-semibold', diffTextCls)}>
-                  {diffArrow} {diff >= 0 ? '+' : ''}{diff.toLocaleString()}
-                </span>
-                <span className="text-sm font-semibold text-zinc-500 ml-0.5">daily</span>
-              </div>
+              {totalViews > 0 && (
+                <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+                  <span className="text-sm font-semibold text-white/80">👁 {totalViews.toLocaleString()} views</span>
+                </div>
+              )}
+              {dailySpend > 0 && (
+                <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
+                  <span className="text-sm font-semibold text-green-400">~${dailySpend.toLocaleString()}/day est.</span>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -173,7 +139,11 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
 
         <div className="flex items-center justify-between mb-2.5">
           <span className="text-xs text-zinc-500">{langDisplay}</span>
-          <span className="text-xs text-zinc-600">{days} {days === 1 ? 'day' : 'days'}</span>
+          {creativesCount > 0 && (
+            <span className="text-xs text-zinc-500">
+              {creativesCount} creative{creativesCount !== 1 ? 's' : ''}
+            </span>
+          )}
         </div>
 
         {locked ? (

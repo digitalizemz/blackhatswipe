@@ -10,6 +10,8 @@ export interface SupabaseOffer {
   today_ads: number | null
   yesterday_ads: number | null
   days_running: number | null
+  total_views: number | null
+  estimated_daily_spend: number | null
   niche_id: string | null
   offer_type_id: string | null
   language_id: string | null
@@ -24,6 +26,7 @@ export interface SupabaseOffer {
   languages: { name: string; code: string | null; flag_emoji: string | null } | null
   traffic_sources: { name: string } | null
   offer_types: { name: string } | null
+  offer_files: Array<{ id: string; folder_name: string }> | null
 }
 
 export interface OfferSnapshot {
@@ -43,4 +46,14 @@ export interface OfferFile {
   file_size: number | null
   uploaded_by: string | null
   created_at: string
+  // scraping fields (columns already exist in DB)
+  post_url: string | null
+  views: number | null
+  likes: number | null
+  comments: number | null
+  screenshot_url: string | null
+  scrape_status: 'no_url' | 'active' | 'inactive' | 'paused' | null
+  last_scraped_at: string | null
+  cpm_estimated: number | null
+  target_market: string | null
 }

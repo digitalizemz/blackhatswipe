@@ -97,12 +97,6 @@ export default function EditOfferPage() {
   const [thumbTab,       setThumbTab]       = useState<'url' | 'upload'>('url')
   const [thumbUploading, setThumbUploading] = useState(false)
 
-  // Metrics
-  const [todayAds,     setTodayAds]    = useState<number | ''>(0)
-  const [yesterdayAds, setYesterdayAds]= useState<number | ''>(0)
-  const [daysRunning,  setDaysRunning] = useState<number | ''>(0)
-  const [saveSnapshot, setSaveSnapshot]= useState(false)
-
   // Ad Library Links
   const [adLibraryLinks, setAdLibraryLinks] = useState<LinkRow[]>([{ name: '', url: '' }])
 
@@ -138,9 +132,6 @@ export default function EditOfferPage() {
       setIsScaling(data.is_scaling ?? false)
       setIsWinning(data.is_winning ?? false)
       setThumbnailUrl(data.thumbnail_url ?? '')
-      setTodayAds(data.today_ads ?? 0)
-      setYesterdayAds(data.yesterday_ads ?? 0)
-      setDaysRunning(data.days_running ?? 0)
       setAdLibraryLinks(Array.isArray(data.ad_library_links) && data.ad_library_links.length > 0 ? data.ad_library_links : [{ name: '', url: '' }])
       setTags(Array.isArray(data.tags) ? data.tags : [])
       setDescription(data.description ?? '')
@@ -217,9 +208,6 @@ export default function EditOfferPage() {
       status,
       is_scaling:       isScaling,
       is_winning:       isWinning,
-      today_ads:        Number(todayAds)     || 0,
-      yesterday_ads:    Number(yesterdayAds) || 0,
-      days_running:     Number(daysRunning)  || 0,
       ad_library_links: adLibraryLinks.filter((l) => l.name || l.url),
       tags,
       added_by:         user.id,
@@ -240,14 +228,6 @@ export default function EditOfferPage() {
     if (updateErr) {
       setToast({ message: updateErr.message, type: 'error' })
       return
-    }
-
-    if (saveSnapshot) {
-      await supabase.from('offer_ad_snapshots').upsert({
-        offer_id:      data.id,
-        ad_count:      Number(todayAds) || 0,
-        snapshot_date: new Date().toISOString().split('T')[0],
-      }, { onConflict: 'offer_id,snapshot_date' })
     }
 
     setToast({ message: 'Updated ✓', type: 'success' })
@@ -472,38 +452,11 @@ export default function EditOfferPage() {
             )}
           </div>
 
-          {/* Card 3: Ad Metrics */}
-          <div className={cardCls}>
-            <h2 className="text-base font-semibold text-white mb-4">Ad Metrics</h2>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Today Ads</label>
-                <input type="number" min={0} value={todayAds}
-                  onChange={(e) => setTodayAds(e.target.value === '' ? '' : Number(e.target.value))} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Yesterday Ads</label>
-                <input type="number" min={0} value={yesterdayAds}
-                  onChange={(e) => setYesterdayAds(e.target.value === '' ? '' : Number(e.target.value))} className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs text-zinc-500 mb-1.5">Days Running</label>
-                <input type="number" min={0} value={daysRunning}
-                  onChange={(e) => setDaysRunning(e.target.value === '' ? '' : Number(e.target.value))} className={inputCls} />
-              </div>
-            </div>
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" checked={saveSnapshot} onChange={(e) => setSaveSnapshot(e.target.checked)}
-                className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 accent-yellow-400" />
-              <span className="text-sm text-zinc-400">💾 Save as today&apos;s snapshot</span>
-            </label>
-          </div>
-
-          {/* Card 4: Ad Library Links */}
+          {/* Card 3: Ad Library Links */}
           <div className={cardCls}>
             <div className="mb-4">
               <h2 className="text-base font-semibold text-white">📚 Ad Library Links</h2>
-              <p className="text-sm text-zinc-500 mt-0.5">Links used by n8n to monitor active ads automatically</p>
+              <p className="text-sm text-zinc-500 mt-0.5">Add Facebook Ad Library links to reference this offer&apos;s ads</p>
             </div>
             <div className="space-y-2 mb-3">
               {adLibraryLinks.map((link, idx) => (
@@ -530,11 +483,11 @@ export default function EditOfferPage() {
               + Add Library Link
             </button>
             <p className="text-xs text-zinc-500 mt-2 px-1">
-              ⚡ These links are used by n8n to fetch ad counts daily. Only add Facebook Ad Library URLs here.
+              📌 These links are for reference only — no automatic scraping
             </p>
           </div>
 
-          {/* Card 5: Tags & Description */}
+          {/* Card 4: Tags & Description */}
           <div className={cardCls}>
             <h2 className="text-base font-semibold text-white mb-4">Tags &amp; Description</h2>
             <div className="mb-5">

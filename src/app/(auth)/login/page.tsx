@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import Image from 'next/image'
-import LoginForm from './form'
+import LoginFormRoot from './form'
 
 interface LoginPageProps {
   searchParams: Promise<{ error?: string; message?: string }>
@@ -80,12 +80,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         }}
       >
         <div className="w-full max-w-sm">
-          <h2 className="text-white font-semibold mb-1" style={{ fontSize: '28px' }}>
-            Welcome back
-          </h2>
-          <p className="text-zinc-500 text-sm mb-8">Sign in to continue</p>
-
-          <LoginForm error={params.error} message={params.message} />
+          <LoginFormRoot error={params.error} message={params.message} />
 
           <p className="mt-6 text-sm text-zinc-500 text-center">
             Don&apos;t have an account?{' '}

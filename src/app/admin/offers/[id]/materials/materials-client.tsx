@@ -6,7 +6,23 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { OfferFile } from '@/types/offer'
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const inputCls =
+  'bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm w-full ' +
+  'focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 ' +
+  'placeholder:text-zinc-600 transition-colors'
+
+const SCRAPE_STATUS_CLS: Record<string, string> = {
+  active:   'text-green-400 bg-green-400/10 border-green-400/20',
+  inactive: 'text-red-400 bg-red-400/10 border-red-400/20',
+  paused:   'text-yellow-400 bg-yellow-400/10 border-yellow-400/20',
+  no_url:   'text-zinc-500 bg-zinc-800 border-zinc-700',
+}
+
 const DEFAULT_FOLDERS = ['Ads', 'VSL', 'Checkout', 'Transcriptions']
+
+// ─── Interfaces ───────────────────────────────────────────────────────────────
 
 interface FolderState {
   name: string
@@ -15,8 +31,73 @@ interface FolderState {
   uploading: boolean
 }
 interface LinkForm { name: string; url: string }
+interface LookupOption { id: string; name: string; flag_emoji?: string | null }
+interface OfferMeta { niche_id: string | null; language_id: string | null; traffic_source_id: string | null }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+interface CreativeAttachment {
+  id: string
+  creative_id: string
+  name: string
+  url: string
+  file_type: string | null
+  file_size: number | null
+  created_at: string
+}
+
+// ─── Admin API helpers (service-role) ─────────────────────────────────────────
+
+async function apiUpload(file: File, bucket: string, path: string): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('bucket', bucket)
+  form.append('path', path)
+  const res  = await fetch('/api/admin/materials/upload', { method: 'POST', body: form })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error ?? 'Upload failed')
+  return json.publicUrl as string
+}
+
+async function apiInsertOfferFile(body: Record<string, unknown>): Promise<{ data: OfferFile | null; error: string | null }> {
+  const res  = await fetch('/api/admin/materials/offer-files', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })
+  const json = await res.json()
+  return { data: (json.data as OfferFile) ?? null, error: json.error ?? null }
+}
+
+async function apiUpdateOfferFile(id: string, updates: Record<string, unknown>): Promise<{ data: OfferFile | null; error: string | null }> {
+  const res  = await fetch(`/api/admin/materials/offer-files/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates),
+  })
+  const json = await res.json()
+  return { data: (json.data as OfferFile) ?? null, error: json.error ?? null }
+}
+
+async function apiDeleteOfferFile(id: string): Promise<void> {
+  await fetch(`/api/admin/materials/offer-files/${id}`, { method: 'DELETE' })
+}
+
+async function apiListAttachments(creativeId: string): Promise<CreativeAttachment[]> {
+  const res  = await fetch(`/api/admin/materials/creative-attachments?creative_id=${creativeId}`)
+  const json = await res.json()
+  return (json.data as CreativeAttachment[]) ?? []
+}
+
+async function apiUploadAttachment(file: File, creativeId: string): Promise<CreativeAttachment | null> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('creative_id', creativeId)
+  form.append('name', file.name)
+  const res  = await fetch('/api/admin/materials/creative-attachments', { method: 'POST', body: form })
+  const json = await res.json()
+  return (json.data as CreativeAttachment) ?? null
+}
+
+async function apiDeleteAttachment(id: string): Promise<void> {
+  await fetch(`/api/admin/materials/creative-attachments/${id}`, { method: 'DELETE' })
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getFileIcon(fileType: string | null, fileName: string): string {
   if (fileType === 'link') return '🔗'
@@ -26,6 +107,23 @@ function getFileIcon(fileType: string | null, fileName: string): string {
   if (ext === 'pdf') return '📄'
   if (['doc', 'docx'].includes(ext)) return '📝'
   return '📎'
+}
+
+function getAttachmentIcon(fileType: string | null): string {
+  if (!fileType) return '📎'
+  const t = fileType.toLowerCase()
+  if (['mp4', 'mov', 'webm', 'video'].includes(t)) return '🎬'
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'image'].includes(t)) return '🖼'
+  if (t === 'pdf') return '📄'
+  if (['doc', 'docx'].includes(t)) return '📝'
+  return '📎'
+}
+
+function formatBytes(bytes: number | null): string {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
 function extractYouTubeId(url: string): string | null {
@@ -41,6 +139,8 @@ function isVideoUrl(url: string, fileType: string | null) {
   return fileType === 'video' || /\.(mp4|mov|webm)$/i.test(url)
 }
 
+// ─── Toast ────────────────────────────────────────────────────────────────────
+
 function Toast({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
   return (
     <div
@@ -52,74 +152,455 @@ function Toast({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
   )
 }
 
+// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+
+function DeleteConfirmModal({
+  name, busy, onConfirm, onCancel,
+}: {
+  name: string; busy: boolean; onConfirm: () => void; onCancel: () => void
+}) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onCancel])
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm px-4" onClick={onCancel}>
+      <div className="bg-[#111] border border-[#1A1A1A] rounded-2xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-white mb-2">Delete Creative?</h3>
+        <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
+          This will permanently delete{' '}
+          <span className="text-white font-medium">{name || 'this creative'}</span>{' '}
+          and all its scraping history.
+        </p>
+        <div className="flex gap-2">
+          <button onClick={onConfirm} disabled={busy}
+            className="flex-1 h-10 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-lg cursor-pointer disabled:opacity-50 transition-all"
+          >{busy ? '…' : 'Delete'}</button>
+          <button onClick={onCancel} disabled={busy}
+            className="flex-1 h-10 border border-zinc-700 text-zinc-400 hover:text-white text-sm rounded-lg cursor-pointer disabled:opacity-50 transition-all"
+          >Cancel</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Edit Creative Modal ──────────────────────────────────────────────────────
+
+function EditCreativeModal({
+  creative, niches, languages, trafficSources, offerMeta,
+  onSave, onDelete, onClose,
+}: {
+  creative: OfferFile
+  niches: LookupOption[]
+  languages: LookupOption[]
+  trafficSources: LookupOption[]
+  offerMeta: OfferMeta
+  onSave: (id: string, updates: Record<string, unknown>) => Promise<{ error: unknown }>
+  onDelete: (creative: OfferFile) => void
+  onClose: () => void
+}) {
+  const parts = creative.file_name.split(' | ')
+
+  const [name,         setName]         = useState(parts[0] ?? '')
+  const [type,         setType]         = useState(creative.file_type ?? 'video')
+  const [angle,        setAngle]        = useState(parts[1] ?? '')
+  const [mediaUrl,     setMediaUrl]     = useState(creative.file_url)
+  const [postUrl,      setPostUrl]      = useState(creative.post_url ?? '')
+  const [cpm,          setCpm]          = useState(creative.cpm_estimated ? String(creative.cpm_estimated) : '')
+  const [targetMarket, setTargetMarket] = useState(
+    languages.find(l => l.name === creative.target_market)?.id ?? ''
+  )
+  const [nicheId,      setNicheId]      = useState(offerMeta.niche_id ?? '')
+  const [languageId,   setLanguageId]   = useState(offerMeta.language_id ?? '')
+  const [trafficId,    setTrafficId]    = useState(offerMeta.traffic_source_id ?? '')
+  const [scrapeStatus, setScrapeStatus] = useState<'no_url' | 'active' | 'inactive' | 'paused' | null>(
+    creative.scrape_status ?? 'no_url'
+  )
+  const [saving, setSaving] = useState(false)
+
+  // Attachments
+  const attachFileRef = useRef<HTMLInputElement>(null)
+  const [attachments,        setAttachments]        = useState<CreativeAttachment[]>([])
+  const [loadingAttachments, setLoadingAttachments] = useState(true)
+  const [uploadingAttach,    setUploadingAttach]    = useState(false)
+
+  const ytId    = extractYouTubeId(mediaUrl)
+  const isImage = isImageUrl(mediaUrl, type)
+  const isVideo = isVideoUrl(mediaUrl, type)
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  useEffect(() => {
+    apiListAttachments(creative.id).then(data => {
+      setAttachments(data)
+      setLoadingAttachments(false)
+    })
+  }, [creative.id])
+
+  void nicheId; void languageId; void trafficId
+
+  async function handleSave() {
+    setSaving(true)
+    const langName  = languages.find(l => l.id === targetMarket)?.name ?? null
+    const fileName  = `${name.trim() || 'Creative'}${angle.trim() ? ` | ${angle.trim()}` : ''}`
+    const newStatus = postUrl.trim()
+      ? (scrapeStatus === 'no_url' ? 'active' : scrapeStatus)
+      : 'no_url'
+    const { error } = await onSave(creative.id, {
+      file_name:     fileName,
+      file_type:     type,
+      file_url:      mediaUrl.trim(),
+      post_url:      postUrl.trim() || null,
+      cpm_estimated: cpm ? parseFloat(cpm) : null,
+      target_market: langName,
+      scrape_status: newStatus,
+    })
+    setSaving(false)
+    if (!error) onClose()
+  }
+
+  async function handleAttachUpload(file: File) {
+    setUploadingAttach(true)
+    try {
+      const record = await apiUploadAttachment(file, creative.id)
+      if (record) setAttachments(prev => [record, ...prev])
+    } catch (_) {}
+    setUploadingAttach(false)
+  }
+
+  async function handleAttachDelete(attachId: string) {
+    await apiDeleteAttachment(attachId)
+    setAttachments(prev => prev.filter(a => a.id !== attachId))
+  }
+
+  const statusKey = scrapeStatus ?? 'no_url'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+      <div
+        className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1A1A1A] shrink-0">
+          <p className="text-sm font-semibold text-white">Edit Creative</p>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white text-2xl leading-none cursor-pointer transition-colors">×</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+
+          {/* Left: preview + status */}
+          <div className="w-56 shrink-0 border-r border-[#1A1A1A] flex flex-col">
+            <div className="flex-1 bg-zinc-950 flex items-center justify-center overflow-hidden min-h-0">
+              {ytId ? (
+                <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="w-full object-cover" />
+              ) : isImage ? (
+                <img src={mediaUrl} alt={name} className="max-w-full max-h-48 object-contain" />
+              ) : isVideo ? (
+                <video src={mediaUrl} className="max-w-full max-h-48" muted preload="metadata" />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-zinc-600 p-6">
+                  <span className="text-5xl opacity-20">🎬</span>
+                  <p className="text-xs text-center">No preview</p>
+                </div>
+              )}
+            </div>
+            <div className="p-3 border-t border-[#1A1A1A] space-y-3 shrink-0">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Scrape Status</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full border capitalize ${SCRAPE_STATUS_CLS[statusKey] ?? SCRAPE_STATUS_CLS.no_url}`}>
+                  {statusKey.replace('_', ' ')}
+                </span>
+              </div>
+              {creative.scrape_status && creative.scrape_status !== 'no_url' && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Pause Scraping</p>
+                  <div
+                    className="flex items-center justify-between gap-2 p-2 bg-[#111] rounded-lg border border-[#1C1C1C] cursor-pointer select-none"
+                    onClick={() => setScrapeStatus(s => s === 'paused' ? 'active' : 'paused')}
+                  >
+                    <span className="text-xs text-zinc-400">{scrapeStatus === 'paused' ? 'Paused' : 'Active'}</span>
+                    <div className={`relative w-8 h-4 rounded-full transition-colors shrink-0 ${scrapeStatus === 'paused' ? 'bg-yellow-400' : 'bg-zinc-700'}`}>
+                      <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${scrapeStatus === 'paused' ? 'left-[18px]' : 'left-0.5'}`} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right: form */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+
+            {/* Name */}
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Creative Name</label>
+              <input type="text" value={name} onChange={e => setName(e.target.value)}
+                placeholder="Ex: Creative 01 – Doctor Hook" className={inputCls} />
+            </div>
+
+            {/* Type + Angle */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Type</label>
+                <select value={type} onChange={e => setType(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                  <option value="video">Video</option>
+                  <option value="image">Image</option>
+                  <option value="gif">GIF</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Angle / Hook</label>
+                <input type="text" value={angle} onChange={e => setAngle(e.target.value)}
+                  placeholder="Ex: Doctor authority..." className={inputCls} />
+              </div>
+            </div>
+
+            {/* Content URL */}
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Content URL</label>
+              <input type="url" value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
+                placeholder="YouTube, Vimeo or direct video/image URL" className={inputCls} />
+            </div>
+
+            {/* Native Post URL */}
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">
+                Native Post URL <span className="text-zinc-600 normal-case">(Facebook)</span>
+              </label>
+              <input type="url" value={postUrl} onChange={e => setPostUrl(e.target.value)}
+                placeholder="https://facebook.com/watch/?v=..." className={inputCls} />
+              <p className="text-[10px] text-zinc-600 mt-1">Used for automatic scraping of views, likes and comments</p>
+            </div>
+
+            {/* CPM + Target Market */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">CPM Estimated</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">$</span>
+                  <input type="number" step="0.01" min="0" value={cpm} onChange={e => setCpm(e.target.value)}
+                    placeholder="e.g. 8 for LATAM, 25 for USA" className={`${inputCls} pl-7`} />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Target Market</label>
+                <select value={targetMarket} onChange={e => setTargetMarket(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                  <option value="">Select market…</option>
+                  {languages.map(l => (
+                    <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Inherited from offer */}
+            <div className="pt-1">
+              <p className="text-[10px] uppercase tracking-widest text-zinc-600 mb-2">Inherited from offer (context only)</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Niche</label>
+                  <select value={nicheId} onChange={e => setNicheId(e.target.value)} className={`${inputCls} cursor-pointer opacity-60`}>
+                    <option value="">— none —</option>
+                    {niches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Language</label>
+                  <select value={languageId} onChange={e => setLanguageId(e.target.value)} className={`${inputCls} cursor-pointer opacity-60`}>
+                    <option value="">— none —</option>
+                    {languages.map(l => (
+                      <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Traffic Source</label>
+                  <select value={trafficId} onChange={e => setTrafficId(e.target.value)} className={`${inputCls} cursor-pointer opacity-60`}>
+                    <option value="">— none —</option>
+                    {trafficSources.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Additional Files ── */}
+            <div className="pt-2">
+              <div className="border-t border-[#1A1A1A] pt-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-xs font-semibold text-zinc-300">📎 Additional Files</p>
+                    <p className="text-[10px] text-zinc-600 mt-0.5">Screenshots, metrics, ad copies, reference docs...</p>
+                  </div>
+                  <input
+                    ref={attachFileRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.mp4,.mov,.txt,.csv,.xlsx"
+                    className="hidden"
+                    onChange={async e => {
+                      const files = Array.from(e.target.files ?? [])
+                      e.target.value = ''
+                      for (const f of files) await handleAttachUpload(f)
+                    }}
+                  />
+                  <button
+                    onClick={() => attachFileRef.current?.click()}
+                    disabled={uploadingAttach}
+                    className="text-xs border border-zinc-700 text-zinc-400 hover:border-yellow-400 hover:text-yellow-400 px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-50 transition-colors"
+                  >
+                    {uploadingAttach ? 'Uploading…' : '↑ Upload'}
+                  </button>
+                </div>
+
+                {loadingAttachments ? (
+                  <p className="text-[11px] text-zinc-600 py-2">Loading…</p>
+                ) : attachments.length === 0 ? (
+                  <div
+                    className="border border-dashed border-zinc-800 rounded-lg p-4 text-center cursor-pointer hover:border-zinc-600 transition-colors"
+                    onClick={() => attachFileRef.current?.click()}
+                  >
+                    <p className="text-xs text-zinc-600">Click to upload files</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {attachments.map(a => (
+                      <div key={a.id} className="flex items-center gap-2.5 bg-[#111] border border-[#1C1C1C] rounded-lg px-3 py-2 group">
+                        <span className="text-base shrink-0">{getAttachmentIcon(a.file_type)}</span>
+                        <div className="flex-1 min-w-0">
+                          <a href={a.url} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-zinc-300 hover:text-yellow-400 truncate block transition-colors"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            {a.name}
+                          </a>
+                          {a.file_size && (
+                            <p className="text-[10px] text-zinc-600">{formatBytes(a.file_size)}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => handleAttachDelete(a.id)}
+                          className="text-zinc-700 hover:text-red-400 text-lg leading-none cursor-pointer shrink-0 transition-colors opacity-0 group-hover:opacity-100"
+                        >×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-[#1A1A1A] shrink-0">
+          <button onClick={() => onDelete(creative)}
+            className="text-sm text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+          >Delete Creative</button>
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="border border-zinc-700 text-zinc-400 h-10 px-4 rounded-lg cursor-pointer hover:border-zinc-500 hover:text-white transition-colors text-sm"
+            >Cancel</button>
+            <button onClick={handleSave} disabled={saving}
+              className="bg-yellow-400 text-black font-semibold h-10 px-5 rounded-lg cursor-pointer hover:brightness-110 disabled:opacity-60 transition-all text-sm"
+            >{saving ? 'Saving…' : 'Save Changes'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Creative card ────────────────────────────────────────────────────────────
 
-function CreativeCard({ creative, onDelete }: { creative: OfferFile; onDelete: (id: string) => void }) {
+function CreativeCard({
+  creative, onEdit, onDelete,
+}: {
+  creative: OfferFile
+  onEdit: (c: OfferFile) => void
+  onDelete: (c: OfferFile) => void
+}) {
   const parts = creative.file_name.split(' | ')
   const name  = parts[0] ?? ''
   const angle = parts[1] ?? ''
   const ytId  = extractYouTubeId(creative.file_url)
 
   return (
-    <div className="bg-[#111111] border border-[#1C1C1C] rounded-xl overflow-hidden cursor-pointer hover:border-zinc-600 transition-colors">
+    <div className="bg-[#111111] border border-[#1C1C1C] rounded-xl overflow-hidden hover:border-zinc-600 transition-colors">
       {/* Media preview */}
-      <div className="h-36 relative bg-zinc-900">
+      <div className="aspect-[4/3] relative bg-zinc-900 cursor-pointer" onClick={() => onEdit(creative)}>
         {ytId ? (
           <>
-            <img
-              src={`https://img.youtube.com/vi/${ytId}/0.jpg`}
-              alt={name}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
+            <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
                 <span className="text-black text-sm ml-0.5">▶</span>
               </div>
             </div>
           </>
         ) : isImageUrl(creative.file_url, creative.file_type) ? (
-          <img src={creative.file_url} alt={name} className="w-full h-full object-cover" />
+          <img src={creative.file_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
         ) : isVideoUrl(creative.file_url, creative.file_type) ? (
           <>
-            <video src={creative.file_url} className="w-full h-full object-cover" muted preload="metadata" />
-            <div className="absolute inset-0 flex items-center justify-center">
+            <video src={creative.file_url} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
                 <span className="text-black text-sm ml-0.5">▶</span>
               </div>
             </div>
           </>
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
+          <div className="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center">
             <span className="text-3xl">🎬</span>
           </div>
         )}
+
+        {creative.scrape_status && creative.scrape_status !== 'no_url' && (
+          <div className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ${
+            creative.scrape_status === 'active'   ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.9)]' :
+            creative.scrape_status === 'inactive' ? 'bg-red-400' : 'bg-yellow-400'
+          }`} />
+        )}
+
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-2.5 pt-8 pb-2 flex items-end justify-between">
+          <p className="text-sm font-semibold text-white truncate flex-1 mr-2 leading-tight drop-shadow">{name || 'Untitled'}</p>
+          {creative.file_type && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide shrink-0 ${
+              creative.file_type === 'video' ? 'bg-blue-500/80 text-white' :
+              creative.file_type === 'image' ? 'bg-purple-500/80 text-white' :
+              'bg-zinc-700/80 text-zinc-300'
+            }`}>
+              {creative.file_type}
+            </span>
+          )}
+        </div>
       </div>
 
-      {/* Info */}
-      <div className="p-3">
-        <p className="text-sm font-medium text-white truncate">{name || 'Untitled'}</p>
-        {angle && <p className="text-xs text-zinc-500 truncate mt-0.5">{angle}</p>}
-        {creative.file_type && (
-          <span className="inline-block text-[10px] px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-md mt-1 capitalize">
-            {creative.file_type}
-          </span>
-        )}
-        <div className="flex items-center gap-3 mt-2">
-          <a
-            href={creative.file_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-zinc-400 hover:text-yellow-400 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            View →
-          </a>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(creative.id) }}
-            className="text-zinc-600 hover:text-red-400 text-sm transition-colors cursor-pointer"
-          >
-            ×
-          </button>
+      {/* Info + actions */}
+      <div className="px-3 py-2.5">
+        {angle && <p className="text-xs text-zinc-500 truncate mb-2">{angle}</p>}
+        <div className="flex items-center justify-between gap-2">
+          {creative.scrape_status && (
+            <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${SCRAPE_STATUS_CLS[creative.scrape_status] ?? SCRAPE_STATUS_CLS.no_url}`}>
+              {creative.scrape_status.replace('_', ' ')}
+            </span>
+          )}
+          <div className="flex items-center gap-3 ml-auto">
+            <button onClick={() => onEdit(creative)}
+              className="text-xs text-zinc-400 hover:text-yellow-400 transition-colors cursor-pointer"
+            >Edit →</button>
+            <button onClick={() => onDelete(creative)}
+              className="text-zinc-600 hover:text-red-400 text-base transition-colors cursor-pointer leading-none"
+            >×</button>
+          </div>
         </div>
       </div>
     </div>
@@ -138,6 +619,12 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   const [loading,    setLoading]    = useState(true)
   const [toast,      setToast]      = useState<string | null>(null)
 
+  // Lookup data
+  const [niches,         setNiches]         = useState<LookupOption[]>([])
+  const [languages,      setLanguages]      = useState<LookupOption[]>([])
+  const [trafficSources, setTrafficSources] = useState<LookupOption[]>([])
+  const [offerMeta,      setOfferMeta]      = useState<OfferMeta>({ niche_id: null, language_id: null, traffic_source_id: null })
+
   // Creatives
   const [creatives,    setCreatives]    = useState<OfferFile[]>([])
   const [showAddForm,  setShowAddForm]  = useState(false)
@@ -150,23 +637,47 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   const [creativeUploading, setCreativeUploading] = useState(false)
   const [savingCreative,    setSavingCreative]    = useState(false)
 
+  // Add form — extra fields
+  const [addPostUrl,      setAddPostUrl]      = useState('')
+  const [addCpm,          setAddCpm]          = useState('')
+  const [addTargetMarket, setAddTargetMarket] = useState('')
+  const [addNicheId,      setAddNicheId]      = useState('')
+  const [addLanguageId,   setAddLanguageId]   = useState('')
+  const [addTrafficId,    setAddTrafficId]    = useState('')
+
+  // Modal state
+  const [editingCreative,  setEditingCreative]  = useState<OfferFile | null>(null)
+  const [deletingCreative, setDeletingCreative] = useState<OfferFile | null>(null)
+  const [deletingBusy,     setDeletingBusy]     = useState(false)
+
   // Folders
   const [files,         setFiles]         = useState<OfferFile[]>([])
   const [folders,       setFolders]       = useState<FolderState[]>([])
   const [newFolderName, setNewFolderName] = useState('')
   const [linkForms,     setLinkForms]     = useState<Record<string, LinkForm>>({})
 
-  // Fetch on mount
+  // Fetch on mount — reads can use anon client (public reads)
   useEffect(() => {
     if (!offerId) return
     Promise.all([
-      supabase.from('offers').select('title').eq('id', offerId).single(),
+      supabase.from('offers').select('title, niche_id, language_id, traffic_source_id').eq('id', offerId).single(),
       supabase.from('offer_files').select('*').eq('offer_id', offerId).order('created_at', { ascending: false }),
-    ]).then(([offerRes, filesRes]) => {
-      if (offerRes.data) setOfferTitle((offerRes.data as { title: string }).title)
+      supabase.from('niches').select('id, name').eq('active', true).order('name'),
+      supabase.from('languages').select('id, name, flag_emoji').eq('active', true).order('name'),
+      supabase.from('traffic_sources').select('id, name').eq('active', true).order('name'),
+    ]).then(([offerRes, filesRes, nichesRes, langsRes, trafficRes]) => {
+      if (offerRes.data) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const d = offerRes.data as any
+        setOfferTitle(d.title ?? '')
+        setOfferMeta({ niche_id: d.niche_id ?? null, language_id: d.language_id ?? null, traffic_source_id: d.traffic_source_id ?? null })
+        setAddNicheId(d.niche_id ?? '')
+        setAddLanguageId(d.language_id ?? '')
+        setAddTrafficId(d.traffic_source_id ?? '')
+      }
 
-      const allFiles   = (filesRes.data ?? []) as OfferFile[]
-      const cFiles     = allFiles.filter((f) => f.folder_name === '__creatives__')
+      const allFiles    = (filesRes.data ?? []) as OfferFile[]
+      const cFiles      = allFiles.filter((f) => f.folder_name === '__creatives__')
       const folderFiles = allFiles.filter((f) => f.folder_name !== '__creatives__')
 
       setCreatives(cFiles)
@@ -175,6 +686,10 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
       const existingFolders = Array.from(new Set(folderFiles.map((f) => f.folder_name))).sort()
       const initNames = existingFolders.length > 0 ? existingFolders : DEFAULT_FOLDERS
       setFolders(initNames.map((n) => ({ name: n, expanded: true, showAddLink: false, uploading: false })))
+
+      setNiches((nichesRes.data ?? []) as LookupOption[])
+      setLanguages((langsRes.data ?? []) as LookupOption[])
+      setTrafficSources((trafficRes.data ?? []) as LookupOption[])
 
       setLoading(false)
     })
@@ -187,6 +702,13 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
 
   // ─── Creatives ────────────────────────────────────────────────────────────
 
+  function openAddForm() {
+    setAddNicheId(offerMeta.niche_id ?? '')
+    setAddLanguageId(offerMeta.language_id ?? '')
+    setAddTrafficId(offerMeta.traffic_source_id ?? '')
+    setShowAddForm(true)
+  }
+
   function resetCreativeForm() {
     setCreativeName('')
     setCreativeType('video')
@@ -194,23 +716,25 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     setMediaTab('url')
     setMediaUrl('')
     setFileSize(null)
+    setAddPostUrl('')
+    setAddCpm('')
+    setAddTargetMarket('')
+    setAddNicheId(offerMeta.niche_id ?? '')
+    setAddLanguageId(offerMeta.language_id ?? '')
+    setAddTrafficId(offerMeta.traffic_source_id ?? '')
     setShowAddForm(false)
   }
 
   async function handleCreativeUpload(file: File) {
     setCreativeUploading(true)
-    const path = `${offerId}/creatives/${Date.now()}-${file.name}`
-    const { data: upload, error: err } = await supabase.storage
-      .from('offer-assets')
-      .upload(path, file, { upsert: true })
-    if (err) {
-      showToast(err.message.includes('bucket') ? 'Storage not configured.' : `Upload failed: ${err.message}`)
-      setCreativeUploading(false)
-      return
+    try {
+      const path      = `${offerId}/creatives/${Date.now()}-${file.name}`
+      const publicUrl = await apiUpload(file, 'offer-assets', path)
+      setMediaUrl(publicUrl)
+      setFileSize(file.size)
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Upload failed')
     }
-    const { data: { publicUrl } } = supabase.storage.from('offer-assets').getPublicUrl(upload.path)
-    setMediaUrl(publicUrl)
-    setFileSize(file.size)
     setCreativeUploading(false)
   }
 
@@ -218,27 +742,47 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     if (!mediaUrl.trim()) { showToast('Add a media URL or upload a file first'); return }
     setSavingCreative(true)
     const fileName = `${creativeName.trim() || 'Creative'}${angle.trim() ? ` | ${angle.trim()}` : ''}`
-    const { data: inserted } = await supabase
-      .from('offer_files')
-      .insert({
-        offer_id:    offerId,
-        folder_name: '__creatives__',
-        file_name:   fileName,
-        file_url:    mediaUrl.trim(),
-        file_type:   creativeType,
-        file_size:   fileSize,
-      })
-      .select('*')
-      .single()
-    if (inserted) setCreatives((prev) => [inserted as OfferFile, ...prev])
+    const langName = languages.find(l => l.id === addTargetMarket)?.name ?? null
+    const { data: inserted, error } = await apiInsertOfferFile({
+      offer_id:      offerId,
+      folder_name:   '__creatives__',
+      file_name:     fileName,
+      file_url:      mediaUrl.trim(),
+      file_type:     creativeType,
+      file_size:     fileSize,
+      post_url:      addPostUrl.trim() || null,
+      cpm_estimated: addCpm ? parseFloat(addCpm) : null,
+      target_market: langName,
+      scrape_status: addPostUrl.trim() ? 'active' : 'no_url',
+    })
     setSavingCreative(false)
-    resetCreativeForm()
-    showToast('Creative saved')
+    if (error) { showToast(`Error: ${error}`); return }
+    if (inserted) {
+      setCreatives((prev) => [inserted, ...prev])
+      resetCreativeForm()
+      showToast('Creative saved')
+      // Open edit modal so admin can attach files immediately
+      setEditingCreative(inserted)
+    }
   }
 
-  async function deleteCreative(id: string) {
-    await supabase.from('offer_files').delete().eq('id', id)
-    setCreatives((prev) => prev.filter((c) => c.id !== id))
+  async function updateCreative(id: string, updates: Record<string, unknown>) {
+    const { data, error } = await apiUpdateOfferFile(id, updates)
+    if (!error && data) {
+      setCreatives(prev => prev.map(c => c.id === id ? data : c))
+    }
+    return { error }
+  }
+
+  async function confirmDeleteCreative() {
+    if (!deletingCreative) return
+    setDeletingBusy(true)
+    await apiDeleteOfferFile(deletingCreative.id)
+    setCreatives(prev => prev.filter(c => c.id !== deletingCreative.id))
+    setDeletingBusy(false)
+    setDeletingCreative(null)
+    setEditingCreative(null)
+    showToast('Creative deleted')
   }
 
   // ─── Folders ──────────────────────────────────────────────────────────────
@@ -269,7 +813,9 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
 
   async function deleteFolder(folderName: string) {
     if (!confirm(`Delete folder "${folderName}" and all its files?`)) return
-    await supabase.from('offer_files').delete().eq('offer_id', offerId).eq('folder_name', folderName)
+    // Use API for each file to bypass RLS
+    const toDelete = files.filter(f => f.folder_name === folderName)
+    await Promise.all(toDelete.map(f => apiDeleteOfferFile(f.id)))
     setFiles((prev) => prev.filter((f) => f.folder_name !== folderName))
     setFolders((prev) => prev.filter((f) => f.name !== folderName))
   }
@@ -277,21 +823,19 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   async function handleFileUpload(folderName: string, fileList: FileList) {
     setUploading(folderName, true)
     for (const file of Array.from(fileList)) {
-      const ext      = file.name.split('.').pop() ?? 'bin'
-      const filePath = `${offerId}/${folderName}/${Date.now()}-${file.name}`
-      const { data: upload, error: upErr } = await supabase.storage
-        .from('offer-assets')
-        .upload(filePath, file, { upsert: true })
-      if (upErr) {
-        showToast(upErr.message.includes('bucket') ? 'Storage not configured.' : `Upload failed: ${upErr.message}`)
-        continue
+      try {
+        const path      = `${offerId}/${folderName}/${Date.now()}-${file.name}`
+        const publicUrl = await apiUpload(file, 'offer-assets', path)
+        const ext       = file.name.split('.').pop() ?? 'bin'
+        const { data: inserted, error } = await apiInsertOfferFile({
+          offer_id: offerId, folder_name: folderName, file_name: file.name,
+          file_url: publicUrl, file_type: ext, file_size: file.size,
+        })
+        if (error) { showToast(`Error: ${error}`); continue }
+        if (inserted) setFiles((prev) => [...prev, inserted])
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : 'Upload failed')
       }
-      const { data: { publicUrl } } = supabase.storage.from('offer-assets').getPublicUrl(upload.path)
-      const { data: inserted } = await supabase
-        .from('offer_files')
-        .insert({ offer_id: offerId, folder_name: folderName, file_name: file.name, file_url: publicUrl, file_type: ext, file_size: file.size })
-        .select('*').single()
-      if (inserted) setFiles((prev) => [...prev, inserted as OfferFile])
     }
     setUploading(folderName, false)
     showToast('Files uploaded')
@@ -300,12 +844,14 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   async function handleAddLink(folderName: string) {
     const form = linkForms[folderName]
     if (!form?.url?.trim()) return
-    const { data: inserted } = await supabase
-      .from('offer_files')
-      .insert({ offer_id: offerId, folder_name: folderName, file_name: form.name.trim() || form.url, file_url: form.url.trim(), file_type: 'link', file_size: null })
-      .select('*').single()
+    const { data: inserted, error } = await apiInsertOfferFile({
+      offer_id: offerId, folder_name: folderName,
+      file_name: form.name.trim() || form.url, file_url: form.url.trim(),
+      file_type: 'link', file_size: null,
+    })
+    if (error) { showToast(`Error: ${error}`); return }
     if (inserted) {
-      setFiles((prev) => [...prev, inserted as OfferFile])
+      setFiles((prev) => [...prev, inserted])
       setLinkForms((prev) => ({ ...prev, [folderName]: { name: '', url: '' } }))
       setFolders((prev) => prev.map((f) => f.name === folderName ? { ...f, showAddLink: false } : f))
       showToast('Link saved')
@@ -313,7 +859,7 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   }
 
   async function deleteFile(fileId: string) {
-    await supabase.from('offer_files').delete().eq('id', fileId)
+    await apiDeleteOfferFile(fileId)
     setFiles((prev) => prev.filter((f) => f.id !== fileId))
   }
 
@@ -326,11 +872,33 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     )
   }
 
-  const inputCls = 'bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm w-full focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 transition-colors'
-
   return (
     <>
       {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
+
+      {/* Edit creative modal */}
+      {editingCreative && (
+        <EditCreativeModal
+          creative={editingCreative}
+          niches={niches}
+          languages={languages}
+          trafficSources={trafficSources}
+          offerMeta={offerMeta}
+          onSave={updateCreative}
+          onDelete={(c) => { setDeletingCreative(c) }}
+          onClose={() => setEditingCreative(null)}
+        />
+      )}
+
+      {/* Delete confirm modal */}
+      {deletingCreative && (
+        <DeleteConfirmModal
+          name={deletingCreative.file_name.split(' | ')[0]}
+          busy={deletingBusy}
+          onConfirm={confirmDeleteCreative}
+          onCancel={() => setDeletingCreative(null)}
+        />
+      )}
 
       <div className="p-8">
         {/* Header */}
@@ -360,72 +928,45 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-base font-semibold text-white">🎬 Creatives</h2>
               <button
-                onClick={() => setShowAddForm((v) => !v)}
+                onClick={openAddForm}
                 className="bg-yellow-400 text-black text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer hover:brightness-110 transition-all"
-              >
-                ＋ Add Creative
-              </button>
+              >＋ Add Creative</button>
             </div>
 
             {/* Add creative form */}
             {showAddForm && (
-              <div className="bg-[#111111] border border-[#1C1C1C] rounded-xl p-4 mb-4">
-                {/* Row 1: name */}
-                <input
-                  type="text"
-                  value={creativeName}
-                  onChange={(e) => setCreativeName(e.target.value)}
-                  placeholder="Ex: Creative 01 – Doctor Hook"
-                  className={`${inputCls} mb-3`}
-                />
-                {/* Row 2: type + angle */}
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <select
-                    value={creativeType}
-                    onChange={(e) => setCreativeType(e.target.value)}
-                    className={`${inputCls} cursor-pointer`}
-                  >
+              <div className="bg-[#111111] border border-[#1C1C1C] rounded-xl p-4 mb-4 space-y-3">
+                <input type="text" value={creativeName} onChange={(e) => setCreativeName(e.target.value)}
+                  placeholder="Ex: Creative 01 – Doctor Hook" className={inputCls} />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <select value={creativeType} onChange={(e) => setCreativeType(e.target.value)}
+                    className={`${inputCls} cursor-pointer`}>
                     <option value="video">Video</option>
                     <option value="image">Image</option>
                     <option value="gif">GIF</option>
                   </select>
-                  <input
-                    type="text"
-                    value={angle}
-                    onChange={(e) => setAngle(e.target.value)}
-                    placeholder="Ex: Doctor authority..."
-                    className={inputCls}
-                  />
+                  <input type="text" value={angle} onChange={(e) => setAngle(e.target.value)}
+                    placeholder="Angle / Hook (ex: Doctor authority...)" className={inputCls} />
                 </div>
-                {/* Row 3: media tabs */}
-                <div className="flex gap-1 mb-3">
+
+                <div className="flex gap-1">
                   {(['url', 'upload'] as const).map((tab) => (
                     <button key={tab} onClick={() => setMediaTab(tab)}
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${mediaTab === tab ? 'bg-yellow-400 text-black' : 'text-zinc-400 hover:text-white'}`}
-                    >
-                      {tab === 'url' ? 'URL' : 'Upload'}
-                    </button>
+                    >{tab === 'url' ? 'URL' : 'Upload'}</button>
                   ))}
                 </div>
                 {mediaTab === 'url' ? (
-                  <input
-                    type="url"
-                    value={mediaUrl}
-                    onChange={(e) => setMediaUrl(e.target.value)}
-                    placeholder="YouTube, Vimeo or direct video/image URL"
-                    className={`${inputCls} mb-3`}
-                  />
+                  <input type="url" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)}
+                    placeholder="YouTube, Vimeo or direct video/image URL" className={inputCls} />
                 ) : (
-                  <div className="mb-3">
-                    <input
-                      ref={creativeInputRef}
-                      type="file"
-                      accept=".mp4,.mov,.jpg,.jpeg,.png,.webp,.gif"
+                  <div>
+                    <input ref={creativeInputRef} type="file" accept=".mp4,.mov,.jpg,.jpeg,.png,.webp,.gif"
                       className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCreativeUpload(f) }}
                     />
-                    <div
-                      onClick={() => creativeInputRef.current?.click()}
+                    <div onClick={() => creativeInputRef.current?.click()}
                       className="border-2 border-dashed border-zinc-700 rounded-xl p-6 text-center cursor-pointer hover:border-yellow-400/50 transition-colors"
                     >
                       {creativeUploading ? (
@@ -434,28 +975,62 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                         <p className="text-sm text-green-400">✓ Uploaded — click to replace</p>
                       ) : (
                         <>
-                          <p className="text-sm text-zinc-400 mb-1">Click to upload or drag & drop</p>
+                          <p className="text-sm text-zinc-400 mb-1">Click to upload or drag &amp; drop</p>
                           <p className="text-xs text-zinc-600">MP4, MOV, JPG, PNG, WEBP, GIF</p>
                         </>
                       )}
                     </div>
                   </div>
                 )}
-                {/* Row 4: actions */}
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={resetCreativeForm}
+
+                <div>
+                  <input type="url" value={addPostUrl} onChange={(e) => setAddPostUrl(e.target.value)}
+                    placeholder="Native Post URL — https://facebook.com/watch/?v=..." className={inputCls} />
+                  <p className="text-[10px] text-zinc-600 mt-1 px-1">Used for automatic scraping of views, likes and comments</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">$</span>
+                    <input type="number" step="0.01" min="0" value={addCpm} onChange={(e) => setAddCpm(e.target.value)}
+                      placeholder="CPM — e.g. 8 for LATAM, 25 for USA" className={`${inputCls} pl-7`} />
+                  </div>
+                  <select value={addTargetMarket} onChange={(e) => setAddTargetMarket(e.target.value)}
+                    className={`${inputCls} cursor-pointer`}>
+                    <option value="">Target Market…</option>
+                    {languages.map(l => (
+                      <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <select value={addNicheId} onChange={e => setAddNicheId(e.target.value)}
+                    className={`${inputCls} cursor-pointer`}>
+                    <option value="">Niche…</option>
+                    {niches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                  </select>
+                  <select value={addLanguageId} onChange={e => setAddLanguageId(e.target.value)}
+                    className={`${inputCls} cursor-pointer`}>
+                    <option value="">Language…</option>
+                    {languages.map(l => (
+                      <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
+                    ))}
+                  </select>
+                  <select value={addTrafficId} onChange={e => setAddTrafficId(e.target.value)}
+                    className={`${inputCls} cursor-pointer`}>
+                    <option value="">Traffic…</option>
+                    {trafficSources.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-1">
+                  <button onClick={resetCreativeForm}
                     className="border border-zinc-700 text-zinc-400 h-10 px-4 rounded-lg cursor-pointer hover:border-zinc-500 hover:text-white transition-colors text-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={saveCreative}
-                    disabled={savingCreative}
+                  >Cancel</button>
+                  <button onClick={saveCreative} disabled={savingCreative}
                     className="bg-yellow-400 text-black font-semibold h-10 px-5 rounded-lg cursor-pointer hover:brightness-110 disabled:opacity-60 transition-all text-sm"
-                  >
-                    {savingCreative ? 'Saving…' : 'Save Creative'}
-                  </button>
+                  >{savingCreative ? 'Saving…' : 'Save Creative'}</button>
                 </div>
               </div>
             )}
@@ -468,7 +1043,12 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {creatives.map((c) => (
-                  <CreativeCard key={c.id} creative={c} onDelete={deleteCreative} />
+                  <CreativeCard
+                    key={c.id}
+                    creative={c}
+                    onEdit={setEditingCreative}
+                    onDelete={setDeletingCreative}
+                  />
                 ))}
               </div>
             )}
@@ -477,23 +1057,18 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
           {/* ─── SECTION 2: Create Folder ─── */}
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5 mb-4">
             <div className="flex gap-3">
-              <input
-                type="text"
-                value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
+              <input type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') createFolder() }}
                 placeholder="Folder name (ex: Ads, VSL, Checkout…)"
                 className="bg-[#111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm flex-1 focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 transition-colors"
               />
               <button onClick={createFolder}
                 className="bg-yellow-400 text-black font-semibold h-11 px-5 rounded-lg cursor-pointer hover:brightness-110 transition-all text-sm shrink-0"
-              >
-                Create Folder
-              </button>
+              >Create Folder</button>
             </div>
           </div>
 
-          {/* ─── SECTION 2: Folders ─── */}
+          {/* ─── SECTION 3: Folders ─── */}
           {folders.length === 0 ? (
             <div className="border border-zinc-800 border-dashed rounded-xl p-8 text-center">
               <p className="text-sm text-zinc-600">No folders yet — create one above</p>
@@ -504,12 +1079,8 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
               const linkForm    = linkForms[folder.name] ?? { name: '', url: '' }
               return (
                 <div key={folder.name} className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl mb-3 overflow-hidden">
-
-                  {/* Folder header */}
-                  <div
-                    className="flex items-center justify-between p-4 cursor-pointer hover:bg-[#111] transition-colors select-none"
-                    onClick={() => toggleFolder(folder.name)}
-                  >
+                  <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-[#111] transition-colors select-none"
+                    onClick={() => toggleFolder(folder.name)}>
                     <div className="flex items-center gap-2.5">
                       <span className={`text-zinc-500 text-xs transition-transform duration-200 ${folder.expanded ? 'rotate-90' : ''}`}>▶</span>
                       <span className="text-base">📁</span>
@@ -519,10 +1090,8 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                       )}
                     </div>
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        ref={(el) => { fileInputRefs.current[folder.name] = el }}
-                        type="file" multiple
-                        accept=".mp4,.mov,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.txt"
+                      <input ref={(el) => { fileInputRefs.current[folder.name] = el }}
+                        type="file" multiple accept=".mp4,.mov,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.txt"
                         className="hidden"
                         onChange={(e) => { if (e.target.files?.length) handleFileUpload(folder.name, e.target.files); e.target.value = '' }}
                       />
@@ -540,7 +1109,6 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
 
                   {folder.expanded && (
                     <>
-                      {/* Add link form */}
                       {folder.showAddLink && (
                         <div className="bg-[#111] border-t border-[#1A1A1A] p-4">
                           <div className="flex gap-3 mb-3">
@@ -564,7 +1132,6 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                         </div>
                       )}
 
-                      {/* Upload progress */}
                       {folder.uploading && (
                         <div className="border-t border-[#1A1A1A] px-4 py-3">
                           <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
@@ -574,7 +1141,6 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                         </div>
                       )}
 
-                      {/* Files list */}
                       {folderFiles.length === 0 && !folder.uploading ? (
                         <div className="border-t border-[#1A1A1A] p-6 text-center">
                           <p className="text-xs text-zinc-600">No files yet</p>
