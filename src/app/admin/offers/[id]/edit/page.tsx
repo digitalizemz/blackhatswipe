@@ -220,7 +220,7 @@ export default function EditOfferPage() {
     if (thumbnailUrl?.trim()) offerObject.thumbnail_url     = thumbnailUrl.trim()
     if (description?.trim())  offerObject.description       = description.trim()
 
-    const { data, error: updateErr } = await supabase
+    const { error: updateErr } = await supabase
       .from('offers').update(offerObject).eq('id', id).select().single()
 
     setSaving(false)

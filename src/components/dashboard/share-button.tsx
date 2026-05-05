@@ -4,10 +4,9 @@ import { useState } from 'react'
 
 interface ShareButtonProps {
   offerId: string
-  offerTitle: string
 }
 
-export default function ShareButton({ offerId, offerTitle }: ShareButtonProps) {
+export default function ShareButton({ offerId }: ShareButtonProps) {
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {

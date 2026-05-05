@@ -29,7 +29,7 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
 
   await admin.from('offer_files').delete().eq('id', params.id)
   // best-effort: cascade scraping snapshots
-  try { await admin.from('creative_snapshots').delete().eq('creative_id', params.id) } catch (_) {}
+  try { await admin.from('creative_snapshots').delete().eq('creative_id', params.id) } catch { /* table may not exist */ }
 
   return Response.json({ success: true })
 }

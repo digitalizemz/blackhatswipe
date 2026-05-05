@@ -18,7 +18,7 @@ export default async function SwipeFilePage() {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    return renderPage([], false)
+    return renderPage([])
   }
 
   // Fetch swipe items — include offer join only to backfill missing thumbnails
@@ -47,12 +47,13 @@ export default async function SwipeFilePage() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const swipeItems: SwipeItemRow[] = rows.map(({ offers: _, ...rest }) => rest)
 
-  return renderPage(swipeItems, true)
+  return renderPage(swipeItems)
 }
 
-function renderPage(swipeItems: SwipeItemRow[], _loggedIn: boolean) {
+function renderPage(swipeItems: SwipeItemRow[]) {
   return (
     <div className="p-8">
       <div className="flex items-center gap-3 mb-6">

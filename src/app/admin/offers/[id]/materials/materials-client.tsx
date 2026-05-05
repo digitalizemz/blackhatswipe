@@ -271,7 +271,7 @@ function EditCreativeModal({
     try {
       const record = await apiUploadAttachment(file, creative.id)
       if (record) setAttachments(prev => [record, ...prev])
-    } catch (_) {}
+    } catch { /* ignore upload error — toast shown via API response */ }
     setUploadingAttach(false)
   }
 
