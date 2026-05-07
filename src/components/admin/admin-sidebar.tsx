@@ -13,12 +13,13 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Overview', href: '/admin',          icon: '📊', adminOnly: true },
-  { label: 'Offers',   href: '/admin/offers',   icon: '📦'                  },
-  { label: 'Users',    href: '/admin/users',    icon: '👥', adminOnly: true  },
-  { label: 'Plans',    href: '/admin/plans',    icon: '💳', adminOnly: true  },
-  { label: 'Support',  href: '/admin/support',  icon: '🎫', adminOnly: true  },
-  { label: 'Refunds',  href: '/admin/refunds',  icon: '💸', adminOnly: true  },
+  { label: 'Overview', href: '/admin',           icon: '📊', adminOnly: true },
+  { label: 'Offers',   href: '/admin/offers',    icon: '📦'                  },
+  { label: 'Users',    href: '/admin/users',     icon: '👥', adminOnly: true },
+  { label: 'Plans',    href: '/admin/plans',     icon: '💳', adminOnly: true },
+  { label: 'Support',  href: '/admin/support',   icon: '🎫'                  },
+  { label: 'Refunds',  href: '/admin/refunds',   icon: '💸'                  },
+  { label: 'Reports',  href: '/admin/reports',   icon: '⚠️'                  },
 ]
 
 export default function AdminSidebar() {
@@ -101,24 +102,13 @@ export default function AdminSidebar() {
                 {pendingRefundCount}
               </span>
             )}
-          </Link>
-        ))}
-
-        {/* Reports — admin only */}
-        {role === 'admin' && (
-          <Link
-            href="/admin/reports"
-            className={linkCls(isActive('/admin/reports'))}
-          >
-            <span className="text-base leading-none">⚠️</span>
-            <span>Reports</span>
-            {openReportCount > 0 && (
+            {item.label === 'Reports' && openReportCount > 0 && (
               <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 leading-tight">
                 {openReportCount}
               </span>
             )}
           </Link>
-        )}
+        ))}
       </nav>
     </aside>
   )
