@@ -3,13 +3,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { deleteUser } from '@/app/actions/admin'
 
 interface ProfileRow {
   id:         string
   email:      string | null
   full_name:  string | null
-  phone:      string | null
   role:       string
   plan:       string
   created_at: string
@@ -24,10 +22,10 @@ const roleBadge: Record<string, string> = {
 }
 
 const planBadge: Record<string, string> = {
-  pro:    'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20',
-  free:   'text-zinc-400  bg-zinc-500/10   border border-zinc-500/20',
-  admin:  'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20',
-  elite:  'text-purple-400 bg-purple-400/10 border border-purple-400/20',
+  pro:   'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20',
+  free:  'text-zinc-400  bg-zinc-500/10   border border-zinc-500/20',
+  admin: 'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20',
+  elite: 'text-purple-400 bg-purple-400/10 border border-purple-400/20',
 }
 
 function initials(email: string | null, name: string | null): string {
@@ -69,7 +67,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
   const isSelf  = user.id === currentUserId
 
   const [fullName, setFullName] = useState(user.full_name ?? '')
-  const [editRole, setEditRole] = useState(user.role      ?? 'user')
+  const [editRole, setEditRole] = useState(user.role ?? 'user')
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirm,  setConfirm]  = useState(false)
@@ -81,16 +79,13 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
   }, [user])
 
   async function handleSave() {
-    setSaving(true); setError('')
+    setSaving(true)
+    setError('')
     try {
       const res = await fetch('/api/admin/update-user', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          userId:    user.id,
-          full_name: fullName || null,
-          role:      editRole,
-        }),
+        body:    JSON.stringify({ userId: user.id, full_name: fullName || null, role: editRole }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'Failed to save'); setSaving(false); return }
@@ -102,14 +97,20 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
   }
 
   async function handleDelete() {
-    if (isSelf) {
-      setError('You cannot delete your own admin account')
-      setConfirm(false)
-      return
+    if (isSelf) { setError("You cannot delete your own account"); setConfirm(false); return }
+    setDeleting(true)
+    setError('')
+    try {
+      const res = await fetch('/api/admin/delete-user', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ userId: user.id }),
+      })
+      const body = await res.json()
+      if (!res.ok) { setError(body.error ?? 'Failed to delete'); setDeleting(false); return }
+    } catch {
+      setError('Network error'); setDeleting(false); return
     }
-    setDeleting(true); setError('')
-    const { error: err } = await deleteUser(user.id)
-    if (err) { setError(err); setDeleting(false); return }
     onDeleted()
     onClose()
   }
@@ -123,12 +124,15 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
         </div>
 
         <div className="space-y-3 mb-5">
+          {/* Email — read-only */}
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Email</label>
-            <p className="w-full bg-[#0D0D0D] border border-zinc-800/50 text-zinc-500 text-sm rounded-lg px-3 h-10 flex items-center truncate select-all">
+            <p className="w-full bg-[#0D0D0D] border border-zinc-800/50 text-zinc-500 text-sm rounded-lg px-3 h-10 flex items-center truncate">
               {user.email ?? '—'}
             </p>
           </div>
+
+          {/* Full Name */}
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Full Name</label>
             <input
@@ -139,6 +143,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
             />
           </div>
 
+          {/* Role — admin only */}
           {isAdmin && (
             <div>
               <label className="text-xs text-zinc-400 mb-1 block">Role</label>
@@ -153,9 +158,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
                 <option value="editor">Editor</option>
                 <option value="admin">Admin</option>
               </select>
-              {isSelf && (
-                <p className="text-xs text-zinc-600 mt-1">You cannot change your own role</p>
-              )}
+              {isSelf && <p className="text-xs text-zinc-600 mt-1">You cannot change your own role</p>}
             </div>
           )}
         </div>
@@ -188,7 +191,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
         )}
         {isAdmin && confirm && (
           <div className="mt-3 p-3 bg-red-900/20 border border-red-500/20 rounded-lg">
-            <p className="text-xs text-red-400 mb-2 text-center">This action is irreversible. Delete this user?</p>
+            <p className="text-xs text-red-400 mb-2 text-center">Irreversible. Delete this user?</p>
             <div className="flex gap-2">
               <button
                 onClick={handleDelete}
@@ -235,11 +238,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
       const res = await fetch('/api/admin/invite-user', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          email,
-          full_name: fullName || null,
-          role:      inviteRole,
-        }),
+        body:    JSON.stringify({ email, full_name: fullName || null, role: inviteRole }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'Failed to send invite'); setLoading(false); return }
@@ -257,30 +256,16 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
           <h2 className="text-base font-bold text-white">Invite User</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none cursor-pointer">×</button>
         </div>
-        <p className="text-xs text-zinc-500 mb-5">
-          An invite email will be sent. Role is applied immediately.
-        </p>
+        <p className="text-xs text-zinc-500 mb-5">An invite email will be sent. Role is applied immediately.</p>
 
         <div className="space-y-3 mb-5">
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Email *</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className={inputCls}
-              placeholder="user@example.com"
-            />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="user@example.com" />
           </div>
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Full Name</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              className={inputCls}
-              placeholder="John Doe"
-            />
+            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputCls} placeholder="John Doe" />
           </div>
           {isAdmin && (
             <div>
@@ -297,11 +282,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
         {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
 
         <div className="flex gap-2">
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="flex-1 h-10 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50"
-          >
+          <button onClick={handleSubmit} disabled={loading} className="flex-1 h-10 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50">
             {loading ? 'Sending…' : 'Send Invite'}
           </button>
           <button onClick={onClose} className="flex-1 h-10 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-sm cursor-pointer">
@@ -331,7 +312,7 @@ export default function AdminUsersPage() {
   const loadUsers = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/get-users')
+      const res  = await fetch('/api/admin/get-users')
       const body = await res.json()
       const data: ProfileRow[] = body.users ?? []
       setUsers(data)
@@ -348,9 +329,7 @@ export default function AdminUsersPage() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    loadUsers()
-  }, [loadUsers]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadUsers() }, [loadUsers]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!search.trim()) { setFiltered(users); return }
@@ -416,12 +395,10 @@ export default function AdminUsersPage() {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-zinc-600 text-sm">
-                  No users found
-                </td>
+                <td colSpan={6} className="px-4 py-12 text-center text-zinc-600 text-sm">No users found</td>
               </tr>
             ) : (
-              filtered.map((user) => (
+              filtered.map(user => (
                 <tr key={user.id} className="hover:bg-[#111111] border-b border-[#1A1A1A] last:border-0 transition-colors">
                   <td className="px-4 py-3">
                     <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-bold text-zinc-300">
@@ -469,11 +446,13 @@ export default function AdminUsersPage() {
             loadUsers()
           }}
           onDeleted={() => {
+            // Remove instantly from local state — no round-trip needed
             setUsers(prev => prev.filter(u => u.id !== editingUser.id))
             setEditingUser(null)
           }}
         />
       )}
+
       {showInvite && (
         <InviteModal
           viewerRole={viewerRole}

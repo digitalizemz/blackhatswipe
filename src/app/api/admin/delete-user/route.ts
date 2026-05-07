@@ -12,17 +12,15 @@ export async function POST(request: Request) {
   const auth = await requireAdmin()
   if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
-  const { userId, full_name, role } = await request.json()
+  const { userId } = await request.json()
   if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 })
 
-  // Try update first; if 0 rows matched (no profile yet), upsert creates the row
-  const { error } = await supabaseAdmin
-    .from('profiles')
-    .upsert(
-      { id: userId, full_name: full_name ?? null, role: role ?? 'user' },
-      { onConflict: 'id' }
-    )
+  // Delete profile row first (avoids FK issues on some Supabase setups)
+  await supabaseAdmin.from('profiles').delete().eq('id', userId)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // Delete auth user — this is the authoritative delete
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
   return NextResponse.json({ success: true })
 }
