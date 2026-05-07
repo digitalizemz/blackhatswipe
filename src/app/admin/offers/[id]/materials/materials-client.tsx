@@ -79,16 +79,6 @@ async function apiListAttachments(creativeId: string): Promise<CreativeAttachmen
   return (json.attachments as CreativeAttachment[]) ?? []
 }
 
-async function apiUploadAttachment(file: File, creativeId: string): Promise<CreativeAttachment | null> {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('creative_id', creativeId)
-  form.append('name', file.name)
-  const res  = await fetch('/api/admin/materials/creative-attachments', { method: 'POST', body: form })
-  const json = await res.json()
-  return (json.data as CreativeAttachment) ?? null
-}
-
 async function apiDeleteAttachment(id: string): Promise<void> {
   await fetch(`/api/admin/materials/creative-attachments/${id}`, { method: 'DELETE' })
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -194,11 +195,15 @@ export function CreativeModal({
                 />
               </div>
             ) : displayIsImg ? (
-              <img
-                src={displayUrl}
-                alt={name}
-                className="max-w-full max-h-full object-contain"
-              />
+              <div className="relative w-full h-full min-h-[300px]">
+                <Image
+                  src={displayUrl}
+                  alt={name}
+                  fill
+                  unoptimized
+                  className="object-contain"
+                />
+              </div>
             ) : displayIsVid ? (
               <video
                 key={displayUrl}
@@ -231,18 +236,26 @@ export function CreativeModal({
                   setActiveVariant(null)
                   setActiveMedia({ url: creative.file_url, name: creative.file_name || 'creative' })
                 }}
-                className={`w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 transition-colors ${
+                className={`relative w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 transition-colors ${
                   activeVariant === null ? 'border-yellow-400' : 'border-transparent hover:border-zinc-600'
                 }`}
               >
                 {mainYtId ? (
-                  <img
+                  <Image
                     src={`https://img.youtube.com/vi/${mainYtId}/default.jpg`}
                     alt="main"
-                    className="w-full h-full object-cover"
+                    fill
+                    unoptimized
+                    className="object-cover"
                   />
                 ) : mainIsImg ? (
-                  <img src={creative.file_url} alt="main" className="w-full h-full object-cover" />
+                  <Image
+                    src={creative.file_url}
+                    alt="main"
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
                 ) : (
                   <div className="w-full h-full bg-[#1A1A1A] flex items-center justify-center text-xl">🎬</div>
                 )}
@@ -255,12 +268,12 @@ export function CreativeModal({
                     setActiveVariant(a)
                     setActiveMedia({ url: a.url, name: a.name || filenameFromUrl(a.url) })
                   }}
-                  className={`w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 transition-colors ${
+                  className={`relative w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 transition-colors ${
                     activeVariant?.id === a.id ? 'border-yellow-400' : 'border-transparent hover:border-zinc-600'
                   }`}
                 >
                   {isImg(a.url, a.file_type) ? (
-                    <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
+                    <Image src={a.url} alt={a.name} fill unoptimized className="object-cover" />
                   ) : (
                     <div className="w-full h-full bg-[#1A1A1A] flex items-center justify-center text-xl">🎬</div>
                   )}
@@ -412,9 +425,9 @@ export function CreativeModal({
                   const displayName = a.name || filenameFromUrl(a.url)
                   return (
                     <div key={a.id} className="flex items-center gap-3 bg-[#111111] rounded-lg p-2.5">
-                      <div className="w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
+                      <div className="relative w-12 h-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
                         {isImg(a.url, a.file_type) ? (
-                          <img src={a.url} alt={displayName} className="w-full h-full object-cover" />
+                          <Image src={a.url} alt={displayName} fill unoptimized className="object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-base">🎬</div>
                         )}
