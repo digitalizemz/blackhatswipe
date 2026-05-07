@@ -21,8 +21,6 @@ const roleBadge: Record<string, string> = {
   admin:  'text-yellow-400 bg-yellow-400/10 border border-yellow-400/20',
   editor: 'text-blue-400  bg-blue-400/10   border border-blue-400/20',
   user:   'text-zinc-400  bg-zinc-500/10   border border-zinc-500/20',
-  free:   'text-zinc-400  bg-zinc-500/10   border border-zinc-500/20',
-  pro:    'text-zinc-400  bg-zinc-500/10   border border-zinc-500/20',
 }
 
 const planBadge: Record<string, string> = {
@@ -62,7 +60,7 @@ interface EditModalProps {
   viewerRole:    string
   currentUserId: string
   onClose:       () => void
-  onSaved:       (updated: Partial<ProfileRow>) => void
+  onSaved:       () => void
   onDeleted:     () => void
 }
 
@@ -72,7 +70,6 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
 
   const [fullName, setFullName] = useState(user.full_name ?? '')
   const [editRole, setEditRole] = useState(user.role      ?? 'user')
-  const [editPlan, setEditPlan] = useState(user.plan      ?? 'free')
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirm,  setConfirm]  = useState(false)
@@ -81,7 +78,6 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
   useEffect(() => {
     setFullName(user.full_name ?? '')
     setEditRole(user.role ?? 'user')
-    setEditPlan(user.plan ?? 'free')
   }, [user])
 
   async function handleSave() {
@@ -94,7 +90,6 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
           userId:    user.id,
           full_name: fullName || null,
           role:      editRole,
-          plan:      editPlan,
         }),
       })
       const body = await res.json()
@@ -102,7 +97,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
     } catch {
       setError('Network error'); setSaving(false); return
     }
-    onSaved({ full_name: fullName || null, role: editRole, plan: editPlan })
+    onSaved()
     onClose()
   }
 
@@ -130,7 +125,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
         <div className="space-y-3 mb-5">
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Email</label>
-            <p className="w-full bg-[#0D0D0D] border border-zinc-800/50 text-zinc-500 text-sm rounded-lg px-3 h-10 flex items-center select-all truncate">
+            <p className="w-full bg-[#0D0D0D] border border-zinc-800/50 text-zinc-500 text-sm rounded-lg px-3 h-10 flex items-center truncate select-all">
               {user.email ?? '—'}
             </p>
           </div>
@@ -142,18 +137,6 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
               className={inputCls}
               placeholder="Full name"
             />
-          </div>
-
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Plan</label>
-            <select
-              value={editPlan}
-              onChange={e => setEditPlan(e.target.value)}
-              className={selectCls}
-            >
-              <option value="free">Free</option>
-              <option value="pro">Pro</option>
-            </select>
           </div>
 
           {isAdmin && (
@@ -374,8 +357,7 @@ export default function AdminUsersPage() {
     const q = search.toLowerCase()
     setFiltered(users.filter(u =>
       u.email?.toLowerCase().includes(q) ||
-      u.full_name?.toLowerCase().includes(q) ||
-      u.phone?.toLowerCase().includes(q)
+      u.full_name?.toLowerCase().includes(q)
     ))
   }, [search, users])
 
@@ -401,7 +383,7 @@ export default function AdminUsersPage() {
       <div className="mb-5">
         <input
           type="text"
-          placeholder="Search by name, email or phone…"
+          placeholder="Search by name or email…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="bg-[#0D0D0D] border border-[#1A1A1A] text-white text-sm rounded-lg px-4 h-11 focus:outline-none focus:border-yellow-400/50 placeholder:text-zinc-600 w-80 transition-colors"
@@ -415,7 +397,6 @@ export default function AdminUsersPage() {
             <tr className="bg-[#050505]">
               <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left w-12"></th>
               <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Name / Email</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Phone</th>
               <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Role</th>
               <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Plan</th>
               <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Joined</th>
@@ -426,7 +407,7 @@ export default function AdminUsersPage() {
             {loading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <tr key={i} className="border-b border-[#1A1A1A]">
-                  {Array.from({ length: 7 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 bg-zinc-800 rounded animate-pulse" />
                     </td>
@@ -435,7 +416,7 @@ export default function AdminUsersPage() {
               ))
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-12 text-center text-zinc-600 text-sm">
+                <td colSpan={6} className="px-4 py-12 text-center text-zinc-600 text-sm">
                   No users found
                 </td>
               </tr>
@@ -451,7 +432,6 @@ export default function AdminUsersPage() {
                     <p className="text-sm font-medium text-white leading-tight">{user.full_name || '—'}</p>
                     <p className="text-xs text-zinc-500 mt-0.5">{user.email ?? '—'}</p>
                   </td>
-                  <td className="px-4 py-3 text-sm text-zinc-400">{user.phone || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${roleBadge[user.role] ?? roleBadge.user}`}>
                       {roleLabel(user.role)}
@@ -484,13 +464,13 @@ export default function AdminUsersPage() {
           viewerRole={viewerRole}
           currentUserId={currentUserId}
           onClose={() => setEditingUser(null)}
-          onSaved={(updated) => {
-            setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...updated } as ProfileRow : u))
-            setEditingUser(null)
-          }}
-          onDeleted={() => {
+          onSaved={() => {
             setEditingUser(null)
             loadUsers()
+          }}
+          onDeleted={() => {
+            setUsers(prev => prev.filter(u => u.id !== editingUser.id))
+            setEditingUser(null)
           }}
         />
       )}

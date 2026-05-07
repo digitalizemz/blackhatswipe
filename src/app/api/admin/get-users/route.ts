@@ -7,11 +7,35 @@ const supabaseAdmin = createClient(
 )
 
 export async function GET() {
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('id, email, full_name, phone, role, plan, plan_changed_at, plan_changed_by, pro_expires_at, created_at')
-    .order('created_at', { ascending: false })
+  // Fetch auth users (source of truth — only real users appear here)
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.listUsers({
+    perPage: 1000,
+  })
+  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ users: data })
+  // Fetch all profiles
+  const { data: profiles } = await supabaseAdmin
+    .from('profiles')
+    .select('id, full_name, phone, role, plan')
+
+  // Build a fast lookup map
+  const profileMap = new Map((profiles ?? []).map(p => [p.id, p]))
+
+  // Merge: auth user is authoritative for id/email/created_at; profile fills the rest
+  const users = authData.users
+    .map(authUser => {
+      const p = profileMap.get(authUser.id)
+      return {
+        id:         authUser.id,
+        email:      authUser.email ?? null,
+        full_name:  p?.full_name ?? null,
+        phone:      p?.phone     ?? null,
+        role:       p?.role      ?? 'user',
+        plan:       p?.plan      ?? 'free',
+        created_at: authUser.created_at,
+      }
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  return NextResponse.json({ users })
 }

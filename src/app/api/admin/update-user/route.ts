@@ -7,13 +7,16 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(request: Request) {
-  const { userId, full_name, role, plan } = await request.json()
+  const { userId, full_name, role } = await request.json()
   if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 })
 
+  // Upsert so the row is created if it doesn't exist yet (e.g. invited-only users)
   const { error } = await supabaseAdmin
     .from('profiles')
-    .update({ full_name: full_name ?? null, role: role ?? 'user', plan: plan ?? 'free' })
-    .eq('id', userId)
+    .upsert(
+      { id: userId, full_name: full_name ?? null, role: role ?? 'user' },
+      { onConflict: 'id' }
+    )
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
