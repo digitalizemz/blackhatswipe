@@ -70,18 +70,18 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
   const isAdmin = viewerRole === 'admin'
   const isSelf  = user.id === currentUserId
 
-  const [email,    setEmail]    = useState(user.email    ?? '')
   const [fullName, setFullName] = useState(user.full_name ?? '')
-  const [phone,    setPhone]    = useState(user.phone     ?? '')
   const [editRole, setEditRole] = useState(user.role      ?? 'user')
+  const [editPlan, setEditPlan] = useState(user.plan      ?? 'free')
   const [saving,   setSaving]   = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [confirm,  setConfirm]  = useState(false)
   const [error,    setError]    = useState('')
 
   useEffect(() => {
-    setEmail(user.email    ?? '')
-    setEditRole(user.role  ?? 'user')
+    setFullName(user.full_name ?? '')
+    setEditRole(user.role ?? 'user')
+    setEditPlan(user.plan ?? 'free')
   }, [user])
 
   async function handleSave() {
@@ -92,10 +92,9 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           userId:    user.id,
-          email:     email   || null,
           full_name: fullName || null,
-          phone:     phone    || null,
           role:      editRole,
+          plan:      editPlan,
         }),
       })
       const body = await res.json()
@@ -103,7 +102,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
     } catch {
       setError('Network error'); setSaving(false); return
     }
-    onSaved({ email: email || null, full_name: fullName || null, phone: phone || null, role: editRole })
+    onSaved({ full_name: fullName || null, role: editRole, plan: editPlan })
     onClose()
   }
 
@@ -131,13 +130,9 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
         <div className="space-y-3 mb-5">
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className={inputCls}
-              placeholder="user@example.com"
-            />
+            <p className="w-full bg-[#0D0D0D] border border-zinc-800/50 text-zinc-500 text-sm rounded-lg px-3 h-10 flex items-center select-all truncate">
+              {user.email ?? '—'}
+            </p>
           </div>
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Full Name</label>
@@ -148,14 +143,17 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
               placeholder="Full name"
             />
           </div>
+
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Phone</label>
-            <input
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              className={inputCls}
-              placeholder="+1 234 567 8900"
-            />
+            <label className="text-xs text-zinc-400 mb-1 block">Plan</label>
+            <select
+              value={editPlan}
+              onChange={e => setEditPlan(e.target.value)}
+              className={selectCls}
+            >
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+            </select>
           </div>
 
           {isAdmin && (
@@ -491,8 +489,8 @@ export default function AdminUsersPage() {
             setEditingUser(null)
           }}
           onDeleted={() => {
-            setUsers(prev => prev.filter(u => u.id !== editingUser.id))
             setEditingUser(null)
+            loadUsers()
           }}
         />
       )}

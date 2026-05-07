@@ -223,8 +223,14 @@ export async function updateUserProfile(
 
 export async function deleteUser(userId: string): Promise<{ error?: string }> {
   const supabase = createAdminClient()
+
+  // Remove the profile first (avoids FK constraint issues on some DB setups)
+  await supabase.from('profiles').delete().eq('id', userId)
+
+  // Remove from auth — this is the authoritative delete
   const { error } = await supabase.auth.admin.deleteUser(userId)
   if (error) return { error: error.message }
+
   revalidatePath('/admin/users')
   return {}
 }

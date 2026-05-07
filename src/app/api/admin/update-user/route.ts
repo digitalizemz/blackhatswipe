@@ -7,18 +7,12 @@ const supabaseAdmin = createClient(
 )
 
 export async function POST(request: Request) {
-  const { userId, email, full_name, phone, role } = await request.json()
+  const { userId, full_name, role, plan } = await request.json()
   if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 })
-
-  // Update auth email if changed
-  if (email) {
-    const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(userId, { email })
-    if (authErr) return NextResponse.json({ error: authErr.message }, { status: 500 })
-  }
 
   const { error } = await supabaseAdmin
     .from('profiles')
-    .update({ ...(email ? { email } : {}), full_name, phone, role })
+    .update({ full_name: full_name ?? null, role: role ?? 'user', plan: plan ?? 'free' })
     .eq('id', userId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
