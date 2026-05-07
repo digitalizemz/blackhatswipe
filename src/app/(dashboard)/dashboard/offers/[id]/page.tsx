@@ -305,9 +305,14 @@ export default function OfferDetailPage() {
         .from('offer_files').select('*')
         .eq('offer_id', id).order('created_at'),
     ]).then(([offerRes, filesRes]) => {
+      if (offerRes.error) {
+        console.error('[OfferDetail] offers fetch error:', offerRes.error.message, offerRes.error.code)
+      }
       if (offerRes.data) setOffer(offerRes.data)
-      const files = (filesRes.data ?? []) as OfferFile[]
-      setAllFiles(files)
+      setAllFiles((filesRes.data ?? []) as OfferFile[])
+      setLoading(false)
+    }).catch(err => {
+      console.error('[OfferDetail] unexpected error:', err)
       setLoading(false)
     })
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps

@@ -113,13 +113,10 @@ export function CreativeModal({
   })
 
   useEffect(() => {
-    fetch(`/api/admin/materials/creative-attachments?creative_id=${creative.id}`)
+    fetch(`/api/creatives/attachments?creative_id=${creative.id}`)
       .then(r => r.json())
-      .then(j => {
-        console.log('[CreativeModal] attachments for', creative.id, ':', j.attachments)
-        setAttachments(j.attachments ?? [])
-      })
-      .catch(err => console.error('[CreativeModal] fetch error:', err))
+      .then(j => { setAttachments(j.attachments ?? []) })
+      .catch(() => {})
   }, [creative.id])
 
   useEffect(() => {
