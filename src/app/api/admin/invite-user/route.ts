@@ -14,8 +14,14 @@ export async function POST(request: Request) {
   const { email, full_name, phone, role = 'user', plan = 'free' } = await request.json()
   if (!email) return Response.json({ error: 'Email is required' }, { status: 400 })
 
+  const isProd = process.env.NODE_ENV === 'production'
+  const baseUrl = isProd
+    ? 'https://www.blackhatswipe.com'
+    : (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')
+
   const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    data: { full_name: full_name ?? null, phone: phone ?? null },
+    data:       { full_name: full_name ?? null, phone: phone ?? null },
+    redirectTo: `${baseUrl}/set-password`,
   })
 
   if (error) return Response.json({ error: error.message }, { status: 400 })
