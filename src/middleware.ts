@@ -36,8 +36,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // Public routes — invite link lands here with no session cookie yet
-  if (pathname === '/set-password') {
+  // Public routes — invite/reset links land here with no session cookie yet
+  if (pathname === '/set-password' || pathname === '/reset-password') {
     return supabaseResponse
   }
 

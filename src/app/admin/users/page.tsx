@@ -230,6 +230,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
   const [inviteRole, setInviteRole] = useState('user')
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
+  const [sent,       setSent]       = useState(false)
 
   async function handleSubmit() {
     if (!email) { setError('Email is required'); return }
@@ -246,7 +247,8 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
       setError('Network error'); setLoading(false); return
     }
     onInvited()
-    onClose()
+    setSent(true)
+    setLoading(false)
   }
 
   return (
@@ -256,39 +258,53 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
           <h2 className="text-base font-bold text-white">Invite User</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none cursor-pointer">×</button>
         </div>
-        <p className="text-xs text-zinc-500 mb-5">An invite email will be sent. Role is applied immediately.</p>
-
-        <div className="space-y-3 mb-5">
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Email *</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="user@example.com" />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Full Name</label>
-            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputCls} placeholder="John Doe" />
-          </div>
-          {isAdmin && (
-            <div>
-              <label className="text-xs text-zinc-400 mb-1 block">Role</label>
-              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={selectCls}>
-                <option value="user">User</option>
-                <option value="editor">Editor</option>
-                <option value="admin">Admin</option>
-              </select>
+        {sent ? (
+          <>
+            <div className="bg-green-900/30 border border-green-700 text-green-300 rounded-lg px-4 py-3 text-sm flex items-start gap-2 mb-5">
+              <span className="shrink-0">✉️</span>
+              <p>Invite sent to <strong>{email}</strong>. Ask them to check their inbox and spam folder.</p>
             </div>
-          )}
-        </div>
+            <button onClick={onClose} className="w-full h-10 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer">
+              Done
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-zinc-500 mb-5">An invite email will be sent. Role is applied immediately.</p>
 
-        {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Email *</label>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} placeholder="user@example.com" />
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400 mb-1 block">Full Name</label>
+                <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputCls} placeholder="John Doe" />
+              </div>
+              {isAdmin && (
+                <div>
+                  <label className="text-xs text-zinc-400 mb-1 block">Role</label>
+                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={selectCls}>
+                    <option value="user">User</option>
+                    <option value="editor">Editor</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              )}
+            </div>
 
-        <div className="flex gap-2">
-          <button onClick={handleSubmit} disabled={loading} className="flex-1 h-10 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50">
-            {loading ? 'Sending…' : 'Send Invite'}
-          </button>
-          <button onClick={onClose} className="flex-1 h-10 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-sm cursor-pointer">
-            Cancel
-          </button>
-        </div>
+            {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
+
+            <div className="flex gap-2">
+              <button onClick={handleSubmit} disabled={loading} className="flex-1 h-10 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50">
+                {loading ? 'Sending…' : 'Send Invite'}
+              </button>
+              <button onClick={onClose} className="flex-1 h-10 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-sm cursor-pointer">
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -94,8 +94,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
               </div>
             )}
             {params.message && (
-              <div className="rounded-md bg-emerald-950 border border-emerald-800 px-4 py-3 text-sm text-emerald-400">
-                {params.message}
+              <div className="bg-green-900/30 border border-green-700 text-green-300 rounded-lg px-4 py-3 text-sm flex items-start gap-2">
+                <span className="shrink-0">✉️</span>
+                <p>{params.message}</p>
               </div>
             )}
 

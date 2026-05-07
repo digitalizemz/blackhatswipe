@@ -131,8 +131,9 @@ function ForgotPasswordForm({ onBack, initialError }: { onBack: () => void; init
     e.preventDefault()
     setLoading(true)
     setError('')
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.blackhatswipe.com'
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://blackhatswipe.com/login',
+      redirectTo: `${siteUrl}/reset-password`,
     })
     setLoading(false)
     if (error) { setError(error.message); return }
@@ -156,9 +157,9 @@ function ForgotPasswordForm({ onBack, initialError }: { onBack: () => void; init
       </p>
 
       {sent ? (
-        <div className="rounded-lg bg-green-950 border border-green-800 px-4 py-4 flex items-start gap-3">
-          <span className="text-green-400 font-bold shrink-0">✓</span>
-          <p className="text-green-400 text-sm">Check your email for a reset link.</p>
+        <div className="bg-green-900/30 border border-green-700 text-green-300 rounded-lg px-4 py-3 text-sm flex items-start gap-2">
+          <span className="shrink-0">✉️</span>
+          <p>We sent a reset link to <strong>{email}</strong>. Check your inbox and spam folder.</p>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">

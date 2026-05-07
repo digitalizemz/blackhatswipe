@@ -23,7 +23,7 @@ export async function signup(formData: FormData) {
     redirect(`/signup?error=${encodeURIComponent(error.message)}`)
   }
 
-  redirect('/signup?message=Check your email to confirm your account.')
+  redirect(`/signup?message=${encodeURIComponent(`We sent a confirmation to ${email}. Check your inbox and spam folder.`)}`)
 }
 
 export async function login(formData: FormData) {
