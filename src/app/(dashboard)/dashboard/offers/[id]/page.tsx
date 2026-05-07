@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
-import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
+import { useUserProfile } from '@/lib/user-profile-context'
 import UpgradeModal from '@/components/ui/upgrade-modal'
 import { VideoPlayer } from '@/components/shared/VideoPlayer'
 import {
@@ -257,9 +257,8 @@ function Toast({ message, type, onHide }: { message: string; type: 'success' | '
 
 export default function OfferDetailPage() {
   const { id }   = useParams<{ id: string }>()
-  const supabase = createClient()
-  const profile  = useUserProfile()
-  const isPro    = userIsPro(profile)
+  const supabase    = createClient()
+  const ctxProfile  = useUserProfile()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [offer,     setOffer]     = useState<any>(null)
@@ -272,7 +271,33 @@ export default function OfferDetailPage() {
   const [toast,             setToast]             = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [creativeFilters,   setCreativeFilters]   = useState<Set<string>>(new Set())
   const [creativeSort,      setCreativeSort]      = useState<'views' | 'recent' | 'name'>('recent')
-  const [showUpgrade,  setShowUpgrade]  = useState(!isPro)
+
+  // Resolved plan/role: context is set server-side, but fall back to a direct
+  // Supabase read so editors are never blocked if the layout's admin client fails.
+  const [resolvedPlan, setResolvedPlan] = useState(ctxProfile.plan)
+  const [resolvedRole, setResolvedRole] = useState(ctxProfile.role)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
+      if (!authUser) return
+      const { data } = await supabase
+        .from('profiles')
+        .select('plan, role')
+        .eq('id', authUser.id)
+        .single()
+      if (data) {
+        setResolvedPlan(data.plan ?? 'free')
+        setResolvedRole(data.role ?? 'user')
+      }
+    })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isPro = resolvedPlan === 'pro'
+             || resolvedRole === 'admin'
+             || resolvedRole === 'editor'
+             || resolvedPlan === 'admin' // legacy
+
+  const [showUpgrade,  setShowUpgrade]  = useState(false)
   const [showReport,   setShowReport]   = useState(false)
 
   useEffect(() => {

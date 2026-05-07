@@ -78,6 +78,13 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
+    // Editors land on /admin/offers — they have no access to the overview page
+    if (profile?.role === 'editor' && pathname === '/admin') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin/offers'
+      return NextResponse.redirect(url)
+    }
+
     return supabaseResponse
   }
 

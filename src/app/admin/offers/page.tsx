@@ -269,12 +269,14 @@ export default function AdminOffersPage() {
                         >
                           Edit
                         </Link>
-                        <button
-                          onClick={() => window.open(`/dashboard/offers/${offer.id}`, '_blank')}
-                          className="border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-4 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
+                        <a
+                          href={`/dashboard/offers/${offer.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-4 py-1.5 rounded-lg text-sm transition-colors"
                         >
                           View
-                        </button>
+                        </a>
                         <button
                           onClick={() => handleDelete(offer.id)}
                           className="text-red-500 hover:text-red-400 px-4 py-1.5 rounded-lg text-sm hover:bg-red-500/10 transition-colors cursor-pointer"
