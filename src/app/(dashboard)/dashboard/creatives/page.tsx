@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 import { CreativeModal, OfferFile, extractYouTubeId, CREATIVE_STATUS_BADGE } from '@/components/dashboard/creative-modal'
+import { useUserProfile, userIsPro, useUpgradeModal } from '@/lib/user-profile-context'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,15 +22,20 @@ type CreativeRow = OfferFile & { offers: OfferMeta | null }
 
 function formatViews(n: number | null): string {
   if (!n) return '0'
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${+(n / 1_000).toFixed(1)}K`
   return n.toString()
 }
 
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
 
-function CreativeCard({ row, onClick }: { row: CreativeRow; onClick: () => void }) {
+function CreativeCard({ row, locked = false, onLockedClick, onClick }: {
+  row: CreativeRow
+  locked?: boolean
+  onLockedClick?: () => void
+  onClick: () => void
+}) {
   const parts   = row.file_name.split(' | ')
   const name    = parts[0] || 'Creative'
   const ytId    = extractYouTubeId(row.file_url)
@@ -58,51 +64,56 @@ function CreativeCard({ row, onClick }: { row: CreativeRow; onClick: () => void 
   const langName     = offer?.languages?.name ?? null
   const trafficName  = offer?.traffic_sources?.name ?? null
 
+  const mediaCls = locked ? 'absolute inset-0 w-full h-full object-cover blur-sm scale-105' : 'absolute inset-0 w-full h-full object-cover'
+
   return (
     <div
       className="bg-[#111] border border-zinc-800 rounded-xl overflow-hidden cursor-pointer hover:border-yellow-400/40 hover:scale-[1.02] transition-all duration-200 group"
-      onClick={onClick}
+      onClick={locked ? onLockedClick : onClick}
     >
       {/* Thumbnail */}
       <div className="aspect-[4/3] relative bg-zinc-900">
-        {dotCls && (
+        {!locked && dotCls && (
           <div className={`absolute top-2 right-2 z-10 w-2.5 h-2.5 rounded-full ${dotCls}`} />
         )}
-        {views > 0 && (
+        {!locked && views > 0 && (
           <div className="absolute top-2 left-2 z-10 bg-black/70 backdrop-blur-sm rounded-md px-2 py-0.5">
             <span className="text-xs font-semibold text-white">👁 {formatViews(views)}</span>
           </div>
         )}
         {ytId ? (
-          <>
-            <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition-colors">
-              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <span className="text-base ml-0.5">▶</span>
-              </div>
-            </div>
-          </>
+          <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className={mediaCls} />
         ) : isImage ? (
-          <img src={row.file_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+          <img src={row.file_url} alt={name} className={mediaCls} />
         ) : isVideo ? (
-          <>
-            <video src={row.file_url} muted preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition-colors">
-              <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                <span className="text-base ml-0.5">▶</span>
-              </div>
-            </div>
-          </>
+          <video src={row.file_url} muted preload="metadata" className={mediaCls} />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-4xl opacity-40">🎬</span>
           </div>
         )}
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-2.5 pt-8 pb-2.5 flex items-end justify-between">
+        {/* Play button for unlocked videos */}
+        {!locked && (ytId || isVideo) && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition-colors">
+            <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <span className="text-base ml-0.5">▶</span>
+            </div>
+          </div>
+        )}
+        {/* Lock overlay */}
+        {locked && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60">
+            <span className="text-3xl mb-1.5">🔒</span>
+            <p className="text-xs font-bold text-white tracking-wide">Upgrade to unlock</p>
+          </div>
+        )}
+        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent px-2.5 pt-8 pb-2.5 flex items-end justify-between z-30">
           <p className="text-sm font-semibold text-white truncate flex-1 mr-2 leading-tight drop-shadow">{name}</p>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide shrink-0 leading-tight ${typeCls}`}>
-            {typeLabel}
-          </span>
+          {!locked && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide shrink-0 leading-tight ${typeCls}`}>
+              {typeLabel}
+            </span>
+          )}
         </div>
       </div>
 
@@ -174,7 +185,10 @@ function Select({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CreativesPage() {
-  const supabase = createClient()
+  const supabase     = createClient()
+  const profile      = useUserProfile()
+  const isPro        = userIsPro(profile)
+  const upgradeModal = useUpgradeModal()
 
   const [rows,    setRows]    = useState<CreativeRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -371,9 +385,18 @@ export default function CreativesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">
-          {filtered.map(row => (
-            <CreativeCard key={row.id} row={row} onClick={() => setSelected(row)} />
-          ))}
+          {filtered.map((row, idx) => {
+            const locked = !isPro && idx > 0
+            return (
+              <CreativeCard
+                key={row.id}
+                row={row}
+                locked={locked}
+                onLockedClick={upgradeModal.show}
+                onClick={() => setSelected(row)}
+              />
+            )
+          })}
         </div>
       )}
 

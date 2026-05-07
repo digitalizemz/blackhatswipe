@@ -39,11 +39,13 @@ export default function UpgradeModal({ onClose }: UpgradeModalProps) {
           ))}
         </ul>
 
-        <p className="text-xs text-zinc-500 text-center mb-5">Contact us to upgrade your plan</p>
+        <p className="text-xs text-zinc-500 text-center mb-5">Message us on WhatsApp to upgrade your plan</p>
 
         <div className="flex flex-col gap-3">
           <a
-            href="mailto:support@blackhatswipe.com"
+            href="https://wa.me/258871252278?text=Quero+fazer+upgrade+para+o+plano+Pro+do+BlackHat+Swipe"
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-lg transition-all flex items-center justify-center text-sm"
           >
             Get Pro Access →
