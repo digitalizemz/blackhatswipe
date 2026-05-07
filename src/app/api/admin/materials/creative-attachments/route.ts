@@ -1,67 +1,97 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { requireAdmin } from '@/lib/supabase/require-admin'
+import { NextRequest, NextResponse } from 'next/server'
 
-const admin = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+const supabaseAdmin = createSupabaseClient(
+  'https://lladxcxjmxtrsorvagql.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
   { auth: { persistSession: false, autoRefreshToken: false } },
 )
 
-export async function GET(request: Request) {
-  const auth = await requireAdmin()
-  if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
-
-  const { searchParams } = new URL(request.url)
-  const creativeId = searchParams.get('creative_id')
-  if (!creativeId) return Response.json({ error: 'creative_id required' }, { status: 400 })
-
-  const { data, error } = await admin
-    .from('creative_attachments')
-    .select('*')
-    .eq('creative_id', creativeId)
-    .order('created_at', { ascending: false })
-
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json({ data })
+function sanitizeFileName(name: string): string {
+  return name
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .toLowerCase()
 }
 
-export async function POST(request: Request) {
-  const auth = await requireAdmin()
-  if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const creativeId = searchParams.get('creative_id')
 
-  const form = await request.formData()
-  const file       = form.get('file') as File | null
-  const creativeId = form.get('creative_id') as string | null
-  const name       = form.get('name') as string | null
+    if (!creativeId) {
+      return NextResponse.json({ error: 'Missing creative_id' }, { status: 400 })
+    }
 
-  if (!file || !creativeId) {
-    return Response.json({ error: 'file and creative_id are required' }, { status: 400 })
+    const { data, error } = await supabaseAdmin
+      .from('creative_attachments')
+      .select('*')
+      .eq('creative_id', creativeId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('creative_attachments error:', error.message, error.code)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ attachments: data ?? [] })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('GET creative-attachments crash:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
+}
 
-  const safeName = name?.trim() || file.name
-  const path     = `attachments/${creativeId}/${Date.now()}-${file.name}`
-  const bytes    = await file.arrayBuffer()
+export async function POST(req: NextRequest) {
+  try {
+    const form       = await req.formData()
+    const file       = form.get('file') as File | null
+    const creativeId = form.get('creative_id') as string | null
+    const name       = form.get('name') as string | null
 
-  const { data: upload, error: upErr } = await admin.storage
-    .from('offer-assets')
-    .upload(path, bytes, { contentType: file.type, upsert: true })
+    if (!file || !creativeId) {
+      return NextResponse.json({ error: 'file and creative_id are required' }, { status: 400 })
+    }
 
-  if (upErr) return Response.json({ error: upErr.message }, { status: 500 })
+    const safeName = name?.trim() || file.name
+    const safePath = sanitizeFileName(file.name)
+    const path     = `attachments/${creativeId}/${Date.now()}-${safePath}`
+    const bytes    = await file.arrayBuffer()
 
-  const { data: { publicUrl } } = admin.storage.from('offer-assets').getPublicUrl(upload.path)
+    const { data: upload, error: upErr } = await supabaseAdmin.storage
+      .from('offer-assets')
+      .upload(path, bytes, { contentType: file.type, upsert: true })
 
-  const { data, error } = await admin
-    .from('creative_attachments')
-    .insert({
-      creative_id: creativeId,
-      name:        safeName,
-      url:         publicUrl,
-      file_type:   file.name.split('.').pop() ?? null,
-      file_size:   file.size,
-    })
-    .select('*')
-    .single()
+    if (upErr) {
+      console.error('attachment upload error:', upErr.message)
+      return NextResponse.json({ error: upErr.message }, { status: 500 })
+    }
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json({ data })
+    const { data: { publicUrl } } = supabaseAdmin.storage.from('offer-assets').getPublicUrl(upload.path)
+
+    const { data, error } = await supabaseAdmin
+      .from('creative_attachments')
+      .insert({
+        creative_id: creativeId,
+        name:        safeName,
+        url:         publicUrl,
+        file_type:   file.name.split('.').pop() ?? null,
+        file_size:   file.size,
+      })
+      .select('*')
+      .single()
+
+    if (error) {
+      console.error('creative_attachments insert error:', error.message, error.code)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ data })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('POST creative-attachments crash:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

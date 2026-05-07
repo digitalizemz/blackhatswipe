@@ -88,9 +88,10 @@ export default function EditOfferPage() {
   const [languageId, setLanguageId] = useState('')
   const [trafficId,  setTrafficId]  = useState('')
   const [offerTypeId,setOfferTypeId]= useState('')
-  const [status,     setStatus]     = useState('active')
-  const [isScaling,  setIsScaling]  = useState(false)
-  const [isWinning,  setIsWinning]  = useState(false)
+  const [status,         setStatus]         = useState('active')
+  const [scalingStatus,  setScalingStatus]  = useState('testing')
+  const [isScaling,      setIsScaling]      = useState(false)
+  const [isWinning,      setIsWinning]      = useState(false)
 
   // Cover image
   const [thumbnailUrl,   setThumbnailUrl]   = useState('')
@@ -129,6 +130,7 @@ export default function EditOfferPage() {
       setTrafficId(data.traffic_source_id ?? '')
       setOfferTypeId(data.offer_type_id ?? '')
       setStatus(data.status ?? 'active')
+      setScalingStatus(data.scaling_status ?? 'testing')
       setIsScaling(data.is_scaling ?? false)
       setIsWinning(data.is_winning ?? false)
       setThumbnailUrl(data.thumbnail_url ?? '')
@@ -206,6 +208,7 @@ export default function EditOfferPage() {
     const offerObject: any = {
       title:            title.trim(),
       status,
+      scaling_status:   scalingStatus,
       is_scaling:       isScaling,
       is_winning:       isWinning,
       ad_library_links: adLibraryLinks.filter((l) => l.name || l.url),
@@ -398,7 +401,7 @@ export default function EditOfferPage() {
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs text-zinc-500 mb-1.5">Status</label>
                   <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputCls} cursor-pointer`}>
@@ -407,12 +410,19 @@ export default function EditOfferPage() {
                     <option value="paused">Paused</option>
                   </select>
                 </div>
-                <div className="flex flex-col justify-end">
-                  <Toggle label="⚡ Scaling"   value={isScaling} onChange={setIsScaling} />
+                <div>
+                  <label className="block text-xs text-zinc-500 mb-1.5">Scaling Status</label>
+                  <select value={scalingStatus} onChange={(e) => setScalingStatus(e.target.value)} className={`${inputCls} cursor-pointer`}>
+                    <option value="testing">🧪 Testing</option>
+                    <option value="scaling">🚀 Scaling</option>
+                    <option value="paused">⏸ Paused</option>
+                    <option value="dead">💀 Dead</option>
+                  </select>
                 </div>
-                <div className="flex flex-col justify-end">
-                  <Toggle label="💀 Modelable" value={isWinning} onChange={setIsWinning} />
-                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Toggle label="⚡ Scaling"   value={isScaling} onChange={setIsScaling} />
+                <Toggle label="💀 Modelable" value={isWinning} onChange={setIsWinning} />
               </div>
             </div>
           </div>

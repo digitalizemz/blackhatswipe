@@ -49,6 +49,7 @@ export default function OffersSection({
   const [trafficFilter, setTrafficFilter] = useState('All')
   const [nicheFilter, setNicheFilter] = useState('All')
   const [sort, setSort] = useState('Latest')
+  const [scalingOnly, setScalingOnly] = useState(false)
 
   // Load filter options once on mount
   useEffect(() => {
@@ -72,12 +73,13 @@ export default function OffersSection({
 
     let query = supabase
       .from('offers')
-      .select('*, niches(name, color), languages(name, code, flag_emoji), traffic_sources(name), offer_types(name), offer_files(id, folder_name)')
+      .select('*, niches(name, color), languages(name, code, flag_emoji), traffic_sources(name), offer_types(name), offer_files(id, folder_name, cpm_estimated, initial_views)')
       .eq('status', 'active')
 
     if (winningOnly) {
       query = query.eq('is_winning', true)
     }
+    if (scalingOnly) query = query.eq('scaling_status', 'scaling')
     if (nicheFilter !== 'All') query = query.eq('niche_id', nicheFilter)
     if (langFilter !== 'All') query = query.eq('language_id', langFilter)
     if (trafficFilter !== 'All') query = query.eq('traffic_source_id', trafficFilter)
@@ -95,7 +97,7 @@ export default function OffersSection({
     console.log('[OffersSection] fetched:', data?.length ?? 0, 'offers | isPro:', isPro)
     setOffers((data ?? []) as SupabaseOffer[])
     setLoading(false)
-  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly, scalingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchOffers()
@@ -153,6 +155,17 @@ export default function OffersSection({
             ))}
           </select>
 
+          <button
+            onClick={() => setScalingOnly(v => !v)}
+            className={`text-sm px-4 py-2 rounded-full border cursor-pointer transition-colors whitespace-nowrap ${
+              scalingOnly
+                ? 'bg-yellow-400/10 border-yellow-400/50 text-yellow-400'
+                : 'bg-[#111111] border-[#1A1A1A] text-zinc-400 hover:text-white hover:border-zinc-600'
+            }`}
+          >
+            🚀 Scaling Only
+          </button>
+
           <span className="ml-auto text-xs text-zinc-500">
             {loading ? '…' : `${offers.length} offer${offers.length !== 1 ? 's' : ''}`}
           </span>
@@ -163,12 +176,18 @@ export default function OffersSection({
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-[#0D0D0D] border border-[#1C1C1C] rounded-xl overflow-hidden animate-pulse">
-              <div className="h-52 bg-zinc-800/40" />
-              <div className="p-4 space-y-2.5">
-                <div className="h-4 bg-zinc-800 rounded w-3/4" />
-                <div className="h-3 bg-zinc-800 rounded w-1/2" />
-                <div className="h-10 bg-zinc-800/60 rounded-lg mt-3" />
+            <div key={i} className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl overflow-hidden animate-pulse">
+              <div className="h-[200px] bg-zinc-800/40" />
+              <div className="p-4 space-y-3">
+                <div className="flex gap-2">
+                  <div className="h-6 bg-zinc-800 rounded-md w-20" />
+                  <div className="h-6 bg-zinc-800 rounded-md w-16" />
+                </div>
+                <div className="bg-zinc-800/60 rounded-xl h-16" />
+                <div className="flex justify-between">
+                  <div className="h-3 bg-zinc-800 rounded w-24" />
+                  <div className="h-3 bg-zinc-800 rounded w-16" />
+                </div>
               </div>
             </div>
           ))}

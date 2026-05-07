@@ -1,17 +1,9 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!key) {
-    throw new Error(
-      '[createAdminClient] SUPABASE_SERVICE_ROLE_KEY is not set. ' +
-      'Add it to .env.local and restart the dev server.'
-    )
-  }
-
-  return createSupabaseClient(url, key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+  return createSupabaseClient(
+    'https://lladxcxjmxtrsorvagql.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  )
 }

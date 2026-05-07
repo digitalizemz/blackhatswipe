@@ -10,16 +10,19 @@ import {
   LayoutGrid,
   Trophy,
   BookMarked,
+  Film,
   MessageCircle,
   HelpCircle,
   Settings,
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  ShieldCheck,
 } from 'lucide-react'
 
 const mainNav = [
   { label: 'All Offers',    href: '/dashboard/offers',        icon: LayoutGrid    },
+  { label: 'Creatives',     href: '/dashboard/creatives',     icon: Film          },
   { label: 'Steal These',   href: '/dashboard/steal-these',   icon: Trophy        },
   { label: 'My Swipe File', href: '/dashboard/swipe-file',    icon: BookMarked    },
 ]
@@ -101,7 +104,7 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + '/')
 
-  const isAdmin  = userRole === 'admin' || userPlan === 'admin'
+  const isAdmin  = userRole === 'admin'
   const isEditor = userRole === 'editor'
   const isPro    = userPlan === 'pro' || isAdmin || isEditor
 
@@ -159,6 +162,25 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
             />
           ))}
         </div>
+
+        {(isAdmin || isEditor) && (
+          <>
+            {!collapsed && (
+              <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-6 mb-1">
+                Admin
+              </p>
+            )}
+            <div className={cn('space-y-0.5', collapsed && 'mt-4')}>
+              <NavItem
+                label="Admin Panel"
+                href="/admin"
+                icon={ShieldCheck}
+                isActive={isActive('/admin')}
+                collapsed={collapsed}
+              />
+            </div>
+          </>
+        )}
 
         {!collapsed && (
           <p className="text-[11px] font-semibold tracking-widest text-zinc-600 uppercase px-4 mt-6 mb-1">

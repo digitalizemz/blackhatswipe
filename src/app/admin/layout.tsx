@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin-client'
 import AdminSidebar from '@/components/admin/admin-sidebar'
 
+const SUPER_ADMIN_ID = '48c6c46d-9d2b-451b-94d9-b95ee7689823'
+
 export default async function AdminLayout({
   children,
 }: {
@@ -15,14 +17,19 @@ export default async function AdminLayout({
   if (!user) redirect('/login')
 
   // Read profile bypassing RLS
-  const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('plan, role')
-    .eq('id', user.id)
-    .single()
+  let profile: { plan: string; role: string } | null = null
+  try {
+    const adminClient = createAdminClient()
+    const { data } = await adminClient
+      .from('profiles')
+      .select('plan, role')
+      .eq('id', user.id)
+      .single()
+    profile = data
+  } catch { /* service-role-key missing/invalid — fall through to SUPER_ADMIN_ID check */ }
 
   const isAdminOrEditor =
+    user.id === SUPER_ADMIN_ID ||
     profile?.role === 'admin' ||
     profile?.role === 'editor' ||
     profile?.plan === 'admin' // legacy

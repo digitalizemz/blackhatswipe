@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
 
 export default function FreeUserBanner() {
+  const profile = useUserProfile()
   const [dismissed, setDismissed] = useState(false)
-  if (dismissed) return null
+  if (userIsPro(profile) || dismissed) return null
 
   return (
     <div className="relative bg-yellow-400/10 border-b border-yellow-400/20 px-4 py-2 flex items-center justify-center gap-3">

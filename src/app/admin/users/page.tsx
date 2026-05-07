@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { deleteUser, type UserPlan } from '@/app/actions/admin'
+import { deleteUser } from '@/app/actions/admin'
 
 interface ProfileRow {
   id:         string
@@ -10,7 +11,7 @@ interface ProfileRow {
   full_name:  string | null
   phone:      string | null
   role:       string
-  plan:       UserPlan
+  plan:       string
   created_at: string
 }
 
@@ -32,9 +33,13 @@ const planBadge: Record<string, string> = {
 }
 
 function initials(email: string | null, name: string | null): string {
-  if (name?.trim()) return name.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()
-  if (email) return email[0].toUpperCase()
-  return '?'
+  if (name?.trim()) {
+    const parts = name.trim().split(/\s+/)
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    return name.trim().slice(0, 2).toUpperCase()
+  }
+  if (email) return email.split('@')[0].slice(0, 2).toUpperCase()
+  return '??'
 }
 
 function formatDate(iso: string) {
@@ -65,25 +70,21 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
   const isAdmin = viewerRole === 'admin'
   const isSelf  = user.id === currentUserId
 
-  const [fullName,  setFullName]  = useState(user.full_name ?? '')
-  const [phone,     setPhone]     = useState(user.phone     ?? '')
-  const [editRole,  setEditRole]  = useState(user.role      ?? 'user')
-  const [editPlan,  setEditPlan]  = useState<string>(user.plan ?? 'free')
-  const [saving,    setSaving]    = useState(false)
-  const [deleting,  setDeleting]  = useState(false)
-  const [confirm,   setConfirm]   = useState(false)
-  const [error,     setError]     = useState('')
+  const [email,    setEmail]    = useState(user.email    ?? '')
+  const [fullName, setFullName] = useState(user.full_name ?? '')
+  const [phone,    setPhone]    = useState(user.phone     ?? '')
+  const [editRole, setEditRole] = useState(user.role      ?? 'user')
+  const [saving,   setSaving]   = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [confirm,  setConfirm]  = useState(false)
+  const [error,    setError]    = useState('')
 
   useEffect(() => {
-    setEditRole(user.role ?? 'user')
-    setEditPlan(user.plan ?? 'free')
+    setEmail(user.email    ?? '')
+    setEditRole(user.role  ?? 'user')
   }, [user])
 
   async function handleSave() {
-    if (isSelf && editRole !== user.role) {
-      setError('You cannot modify your own admin account')
-      return
-    }
     setSaving(true); setError('')
     try {
       const res = await fetch('/api/admin/update-user', {
@@ -91,10 +92,10 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           userId:    user.id,
+          email:     email   || null,
           full_name: fullName || null,
           phone:     phone    || null,
           role:      editRole,
-          plan:      editPlan,
         }),
       })
       const body = await res.json()
@@ -102,7 +103,7 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
     } catch {
       setError('Network error'); setSaving(false); return
     }
-    onSaved({ full_name: fullName || null, phone: phone || null, role: editRole, plan: editPlan as UserPlan })
+    onSaved({ email: email || null, full_name: fullName || null, phone: phone || null, role: editRole })
     onClose()
   }
 
@@ -119,9 +120,6 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
     onClose()
   }
 
-  // Admins see Role + Plan; editors see Plan only
-  const showPlan = isAdmin || viewerRole === 'editor'
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div className="bg-[#111111] border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
@@ -130,9 +128,17 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none cursor-pointer">×</button>
         </div>
 
-        <p className="text-xs text-zinc-500 mb-4 truncate">{user.email}</p>
-
         <div className="space-y-3 mb-5">
+          <div>
+            <label className="text-xs text-zinc-400 mb-1 block">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className={inputCls}
+              placeholder="user@example.com"
+            />
+          </div>
           <div>
             <label className="text-xs text-zinc-400 mb-1 block">Full Name</label>
             <input
@@ -152,25 +158,23 @@ function EditModal({ user, viewerRole, currentUserId, onClose, onSaved, onDelete
             />
           </div>
 
-          {showPlan && (
-            <div className={`grid gap-3 ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {isAdmin && (
-                <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Role</label>
-                  <select value={editRole} onChange={e => setEditRole(e.target.value)} className={selectCls}>
-                    <option value="user">User</option>
-                    <option value="editor">Editor</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
+          {isAdmin && (
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Role</label>
+              <select
+                value={editRole}
+                onChange={e => setEditRole(e.target.value)}
+                disabled={isSelf}
+                className={`${selectCls} disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={isSelf ? "You can't change your own role" : undefined}
+              >
+                <option value="user">User</option>
+                <option value="editor">Editor</option>
+                <option value="admin">Admin</option>
+              </select>
+              {isSelf && (
+                <p className="text-xs text-zinc-600 mt-1">You cannot change your own role</p>
               )}
-              <div>
-                <label className="text-xs text-zinc-400 mb-1 block">Plan</label>
-                <select value={editPlan} onChange={e => setEditPlan(e.target.value)} className={selectCls}>
-                  <option value="free">Free</option>
-                  <option value="pro">Pro</option>
-                </select>
-              </div>
             </div>
           )}
         </div>
@@ -239,9 +243,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
 
   const [email,      setEmail]      = useState('')
   const [fullName,   setFullName]   = useState('')
-  const [phone,      setPhone]      = useState('')
   const [inviteRole, setInviteRole] = useState('user')
-  const [invitePlan, setInvitePlan] = useState('free')
   const [loading,    setLoading]    = useState(false)
   const [error,      setError]      = useState('')
 
@@ -255,9 +257,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
         body:    JSON.stringify({
           email,
           full_name: fullName || null,
-          phone:     phone    || null,
           role:      inviteRole,
-          plan:      invitePlan,
         }),
       })
       const body = await res.json()
@@ -269,9 +269,6 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
     onClose()
   }
 
-  // Admins see Role + Plan; editors see Plan only
-  const showPlan = isAdmin || viewerRole === 'editor'
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div className="bg-[#111111] border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
@@ -280,7 +277,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none cursor-pointer">×</button>
         </div>
         <p className="text-xs text-zinc-500 mb-5">
-          An invite email will be sent. Role and plan are applied immediately.
+          An invite email will be sent. Role is applied immediately.
         </p>
 
         <div className="space-y-3 mb-5">
@@ -304,36 +301,14 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
               placeholder="John Doe"
             />
           </div>
-          <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Phone</label>
-            <input
-              type="text"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              className={inputCls}
-              placeholder="+1 234 567 8900"
-            />
-          </div>
-
-          {showPlan && (
-            <div className={`grid gap-3 ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'}`}>
-              {isAdmin && (
-                <div>
-                  <label className="text-xs text-zinc-400 mb-1 block">Role</label>
-                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={selectCls}>
-                    <option value="user">User</option>
-                    <option value="editor">Editor</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="text-xs text-zinc-400 mb-1 block">Plan</label>
-                <select value={invitePlan} onChange={e => setInvitePlan(e.target.value)} className={selectCls}>
-                  <option value="free">Free</option>
-                  <option value="pro">Pro</option>
-                </select>
-              </div>
+          {isAdmin && (
+            <div>
+              <label className="text-xs text-zinc-400 mb-1 block">Role</label>
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)} className={selectCls}>
+                <option value="user">User</option>
+                <option value="editor">Editor</option>
+                <option value="admin">Admin</option>
+              </select>
             </div>
           )}
         </div>
@@ -361,6 +336,7 @@ function InviteModal({ viewerRole, onClose, onInvited }: InviteModalProps) {
 
 export default function AdminUsersPage() {
   const supabase = createClient()
+  const router   = useRouter()
 
   const [users,         setUsers]         = useState<ProfileRow[]>([])
   const [filtered,      setFiltered]      = useState<ProfileRow[]>([])
@@ -384,7 +360,7 @@ export default function AdminUsersPage() {
         setCurrentUserId(authUser.id)
         const me = data.find(u => u.id === authUser.id)
         if (me?.role === 'admin' || me?.plan === 'admin') setViewerRole('admin')
-        else if (me?.role === 'editor') setViewerRole('editor')
+        else if (me?.role === 'editor') { router.replace('/admin'); return }
       }
     } finally {
       setLoading(false)

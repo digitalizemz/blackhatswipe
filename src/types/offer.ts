@@ -5,6 +5,7 @@ export interface SupabaseOffer {
   status: string
   is_winning: boolean
   is_scaling: boolean
+  scaling_status: string | null
   thumbnail_url: string | null
   vsl_url: string | null
   today_ads: number | null
@@ -26,7 +27,7 @@ export interface SupabaseOffer {
   languages: { name: string; code: string | null; flag_emoji: string | null } | null
   traffic_sources: { name: string } | null
   offer_types: { name: string } | null
-  offer_files: Array<{ id: string; folder_name: string }> | null
+  offer_files: Array<{ id: string; folder_name: string; cpm_estimated: number | null; initial_views: number | null }> | null
 }
 
 export interface OfferSnapshot {
@@ -56,4 +57,9 @@ export interface OfferFile {
   last_scraped_at: string | null
   cpm_estimated: number | null
   target_market: string | null
+  initial_views: number | null
+  initial_likes: number | null
+  initial_comments: number | null
+
+  creative_status: string | null
 }

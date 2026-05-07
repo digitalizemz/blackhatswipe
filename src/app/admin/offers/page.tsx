@@ -5,49 +5,87 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 
+interface OfferFile {
+  id:          string
+  file_url:    string
+  file_type:   string | null
+  post_url:    string | null
+  folder_name: string
+}
+
 interface OfferRow {
-  id: string
-  title: string
-  status: string
-  is_winning: boolean
-  is_scaling: boolean
-  thumbnail_url: string | null
-  today_ads: number | null
-  yesterday_ads: number | null
-  created_at: string
-  niche_id: string | null
-  niches: { name: string; color: string | null } | null
-  traffic_sources: { name: string } | null
+  id:               string
+  title:            string
+  status:           string
+  thumbnail_url:    string | null
+  created_at:       string
+  niches:           { name: string; color: string | null } | null
+  traffic_sources:  { name: string } | null
+  offer_files:      OfferFile[]
 }
 
 const PAGE_SIZE = 25
 
-function todayColor(today: number, yesterday: number): string {
-  if (today > yesterday) return 'text-green-400'
-  if (today >= yesterday * 0.8) return 'text-yellow-400'
-  return 'text-red-400'
+function statusCls(status: string) {
+  const s = status.toLowerCase()
+  if (s === 'active' || s === 'scaling')
+    return 'text-green-400 bg-green-500/10 border-green-500/20'
+  return 'text-zinc-400 bg-zinc-800 border-zinc-700'
 }
 
-function statusCls(status: string): string {
-  const s = status.toLowerCase()
-  if (s === 'scaling') return 'text-green-400 bg-green-500/10 border border-green-500/20'
-  if (s === 'active')  return 'text-blue-400 bg-blue-500/10 border border-blue-500/20'
-  return 'text-zinc-400 bg-zinc-500/10 border border-zinc-500/20'
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  })
+}
+
+function CreativeThumbs({ files }: { files: OfferFile[] }) {
+  const creatives = files.filter(f => f.folder_name === '__creatives__')
+  const thumbs    = creatives.slice(0, 3)
+
+  if (creatives.length === 0) return <span className="text-zinc-600 text-sm">—</span>
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center">
+        {thumbs.map((f, i) => {
+          const isImg = f.file_type === 'image' || /\.(jpg|jpeg|png|webp|gif)$/i.test(f.file_url)
+          return (
+            <div
+              key={f.id}
+              className="w-8 h-8 rounded-md overflow-hidden border-2 border-zinc-950 bg-zinc-800 shrink-0"
+              style={{ marginLeft: i > 0 ? '-8px' : 0, zIndex: 3 - i, position: 'relative' }}
+            >
+              {isImg
+                ? <img src={f.file_url} alt="" className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center text-[10px]">🎬</div>
+              }
+            </div>
+          )
+        })}
+      </div>
+      <span className="text-sm font-semibold text-white tabular-nums">{creatives.length}</span>
+    </div>
+  )
 }
 
 export default function AdminOffersPage() {
   const supabase = createClient()
-  const [offers, setOffers]     = useState<OfferRow[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
-  const [page, setPage]         = useState(0)
-  const [total, setTotal]       = useState(0)
+  const [offers,       setOffers]       = useState<OfferRow[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [page,         setPage]         = useState(0)
+  const [total,        setTotal]        = useState(0)
+  const [reportCounts, setReportCounts] = useState<Record<string, number>>({})
 
   const fetchOffers = useCallback(async () => {
     setLoading(true)
     let q = supabase
       .from('offers')
-      .select('*', { count: 'exact' })
+      .select(
+        'id, title, status, thumbnail_url, created_at, niches(name,color), traffic_sources(name), offer_files(id, file_url, file_type, post_url, folder_name)',
+        { count: 'exact' }
+      )
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -55,29 +93,40 @@ export default function AdminOffersPage() {
 
     const { data, count, error } = await q
     if (error) console.error('[AdminOffers] fetch error:', error)
-    console.log('[AdminOffers] fetched:', count, 'total | page:', page, '| rows:', data?.length)
-    setOffers((data ?? []) as unknown as OfferRow[])
+    const rows = (data ?? []) as unknown as OfferRow[]
+    setOffers(rows)
     setTotal(count ?? 0)
     setLoading(false)
+
+    // Fetch open report counts for these offers
+    if (rows.length > 0) {
+      const ids = rows.map(o => o.id)
+      const { data: reportRows } = await supabase
+        .from('offer_reports')
+        .select('offer_id')
+        .eq('status', 'open')
+        .in('offer_id', ids)
+      const counts: Record<string, number> = {}
+      for (const r of (reportRows ?? []) as { offer_id: string }[]) {
+        counts[r.offer_id] = (counts[r.offer_id] ?? 0) + 1
+      }
+      setReportCounts(counts)
+    }
   }, [page, search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchOffers() }, [fetchOffers])
 
   async function handleDelete(offerId: string) {
-    if (!confirm('Are you sure you want to delete this offer?')) return
-
+    if (!confirm('Delete this offer? This cannot be undone.')) return
     const { error } = await supabase.from('offers').delete().eq('id', offerId)
-
-    if (error) {
-      console.error('Delete error:', error)
-      alert('Error deleting offer: ' + error.message)
-      return
-    }
-
+    if (error) { alert('Error: ' + error.message); return }
     setOffers(prev => prev.filter(o => o.id !== offerId))
+    setTotal(prev => prev - 1)
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  const thCls = 'text-[11px] uppercase tracking-wider text-zinc-500 font-semibold px-5 py-3 text-left'
 
   return (
     <div className="p-8">
@@ -85,11 +134,13 @@ export default function AdminOffersPage() {
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold text-white">Offers</h1>
-          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">{total}</span>
+          <span className="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700">
+            {total}
+          </span>
         </div>
         <Link
           href="/admin/offers/new"
-          className="bg-yellow-400 text-black font-semibold rounded-lg cursor-pointer hover:brightness-110 transition-all px-4 h-10 text-sm flex items-center"
+          className="bg-yellow-400 text-black font-bold rounded-lg hover:brightness-110 transition-all px-5 h-10 text-sm flex items-center gap-1.5"
         >
           + Add Offer
         </Link>
@@ -102,114 +153,131 @@ export default function AdminOffersPage() {
           placeholder="Search offers..."
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-          className="bg-[#0D0D0D] border border-[#1A1A1A] text-white text-sm rounded-lg px-4 h-11 focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 w-72 transition-colors duration-150"
+          className="bg-[#0D0D0D] border border-zinc-800 text-white text-sm rounded-lg px-4 h-10 focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 w-72 transition-colors"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl overflow-hidden">
-        <table className="w-full">
+      <div className="rounded-xl overflow-hidden border border-zinc-800">
+        <table className="w-full border-collapse">
           <thead>
-            <tr className="bg-[#050505]">
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left w-14">Thumb</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Title</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Niche</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Traffic</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-right">Today</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-left">Status</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-center">⚡</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-center">💀</th>
-              <th className="text-xs uppercase text-zinc-500 tracking-wider px-4 py-3 text-right">Actions</th>
+            <tr className="bg-zinc-950 border-b border-zinc-800">
+              <th className={thCls} style={{ minWidth: 320 }}>Offer</th>
+              <th className={thCls} style={{ width: 140 }}>Creatives</th>
+              <th className={thCls} style={{ width: 130 }}>Added</th>
+              <th className={`${thCls} text-right`} style={{ width: 180 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="border-b border-[#1A1A1A]">
-                  {Array.from({ length: 9 }).map((__, j) => (
-                    <td key={j} className="px-4 py-3">
-                      <div className="h-4 bg-zinc-800 rounded animate-pulse" />
+                <tr key={i} className={`border-b border-zinc-800 ${i % 2 === 0 ? 'bg-black' : 'bg-zinc-950'}`}>
+                  <td className="px-5 py-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-14 h-14 rounded-lg bg-zinc-800 animate-pulse shrink-0" />
+                      <div className="space-y-2 flex-1">
+                        <div className="h-3.5 bg-zinc-800 rounded animate-pulse w-48" />
+                        <div className="h-3 bg-zinc-800/60 rounded animate-pulse w-28" />
+                      </div>
+                    </div>
+                  </td>
+                  {[1,2,3].map(j => (
+                    <td key={j} className="px-5 py-5">
+                      <div className="h-3 bg-zinc-800 rounded animate-pulse w-16" />
                     </td>
                   ))}
                 </tr>
               ))
             ) : offers.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-zinc-600 text-sm">
+                <td colSpan={4} className="px-5 py-16 text-center text-zinc-600 text-sm bg-black">
                   No offers found
                 </td>
               </tr>
             ) : (
-              offers.map((offer) => {
-                const today     = offer.today_ads ?? 0
-                const yesterday = offer.yesterday_ads ?? 0
+              offers.map((offer, idx) => {
+                const rowBg = idx % 2 === 0 ? 'bg-black' : 'bg-zinc-950'
+
                 return (
-                  <tr key={offer.id} className="hover:bg-[#111111] border-b border-[#1A1A1A] last:border-0 transition-colors">
-                    {/* Thumb */}
-                    <td className="px-4 py-3">
-                      {offer.thumbnail_url ? (
-                        <img
-                          src={offer.thumbnail_url}
-                          alt={offer.title}
-                          className="w-10 h-10 object-cover rounded-lg"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-800" />
-                      )}
+                  <tr
+                    key={offer.id}
+                    className={`border-b border-zinc-800 last:border-0 hover:bg-zinc-900/60 transition-colors ${rowBg}`}
+                  >
+                    {/* OFFER */}
+                    <td className="px-5 py-5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-zinc-800">
+                          {offer.thumbnail_url
+                            ? <img src={offer.thumbnail_url} alt={offer.title} className="w-full h-full object-cover" />
+                            : <div className="w-full h-full bg-gradient-to-br from-zinc-700 to-zinc-800" />
+                          }
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 mb-1.5">
+                            <p className="text-sm font-semibold text-white leading-snug truncate max-w-[220px]">
+                              {offer.title}
+                            </p>
+                            {(reportCounts[offer.id] ?? 0) > 0 && (
+                              <span className="text-xs text-red-400 font-semibold shrink-0">
+                                ⚠️ {reportCounts[offer.id]}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium border ${statusCls(offer.status)}`}>
+                              {offer.status}
+                            </span>
+                            {offer.niches && (
+                              <span
+                                className="text-[10px] px-1.5 py-0.5 rounded-full font-medium border"
+                                style={{
+                                  color:            offer.niches.color ?? '#a1a1aa',
+                                  backgroundColor:  `${offer.niches.color ?? '#a1a1aa'}18`,
+                                  borderColor:      `${offer.niches.color ?? '#a1a1aa'}35`,
+                                }}
+                              >
+                                {offer.niches.name}
+                              </span>
+                            )}
+                            {offer.traffic_sources && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 font-medium flex items-center gap-1">
+                                <TrafficIcon name={offer.traffic_sources.name} size={10} />
+                                {offer.traffic_sources.name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </td>
-                    {/* Title */}
-                    <td className="px-4 py-3 text-sm text-white max-w-[200px] truncate font-medium">
-                      {offer.title}
+
+                    {/* CREATIVES */}
+                    <td className="px-5 py-5">
+                      <CreativeThumbs files={offer.offer_files} />
                     </td>
-                    {/* Niche */}
-                    <td className="px-4 py-3 text-sm text-zinc-400">
-                      {offer.niches?.name ?? '—'}
+
+                    {/* ADDED */}
+                    <td className="px-5 py-5 text-sm text-zinc-400 whitespace-nowrap">
+                      {formatDate(offer.created_at)}
                     </td>
-                    {/* Traffic */}
-                    <td className="px-4 py-3 text-sm text-zinc-400">
-                      {offer.traffic_sources?.name ? (
-                        <span className="flex items-center gap-1.5">
-                          <TrafficIcon name={offer.traffic_sources.name} size={14} />
-                          {offer.traffic_sources.name}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    {/* Today */}
-                    <td className={`px-4 py-3 text-sm font-semibold tabular-nums text-right ${todayColor(today, yesterday)}`}>
-                      {today > 0 ? today.toLocaleString() : '—'}
-                    </td>
-                    {/* Status */}
-                    <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${statusCls(offer.status)}`}>
-                        {offer.status}
-                      </span>
-                    </td>
-                    {/* Is Scaling */}
-                    <td className="px-4 py-3 text-center text-base">
-                      {offer.is_scaling ? '⚡' : <span className="text-zinc-800">—</span>}
-                    </td>
-                    {/* Is Modelable */}
-                    <td className="px-4 py-3 text-center text-base">
-                      {offer.is_winning ? '💀' : <span className="text-zinc-800">—</span>}
-                    </td>
-                    {/* Actions */}
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-3">
-                        <button
-                          onClick={() => window.open(`/dashboard/offers/${offer.id}`, '_blank')}
-                          className="text-zinc-400 hover:text-white cursor-pointer text-sm font-medium"
-                        >
-                          View
-                        </button>
+
+                    {/* ACTIONS */}
+                    <td className="px-5 py-5">
+                      <div className="flex items-center justify-end gap-2">
                         <Link
                           href={`/admin/offers/${offer.id}/edit`}
-                          className="text-zinc-400 hover:text-white transition-colors text-sm cursor-pointer"
+                          className="bg-yellow-400 hover:bg-yellow-500 text-black font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
                         >
                           Edit
                         </Link>
                         <button
+                          onClick={() => window.open(`/dashboard/offers/${offer.id}`, '_blank')}
+                          className="border border-zinc-600 hover:border-zinc-400 text-zinc-300 hover:text-white px-4 py-1.5 rounded-lg text-sm transition-colors cursor-pointer"
+                        >
+                          View
+                        </button>
+                        <button
                           onClick={() => handleDelete(offer.id)}
-                          className="text-red-400 hover:text-red-300 cursor-pointer text-sm font-medium"
+                          className="text-red-500 hover:text-red-400 px-4 py-1.5 rounded-lg text-sm hover:bg-red-500/10 transition-colors cursor-pointer"
                         >
                           Delete
                         </button>
@@ -233,21 +301,20 @@ export default function AdminOffersPage() {
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="h-10 px-4 text-sm rounded-lg border border-[#1A1A1A] text-zinc-400 hover:text-white hover:border-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+              className="h-9 px-4 text-sm rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
             >
               Prev
             </button>
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="h-10 px-4 text-sm rounded-lg border border-[#1A1A1A] text-zinc-400 hover:text-white hover:border-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
+              className="h-9 px-4 text-sm rounded-lg border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-all"
             >
               Next
             </button>
           </div>
         </div>
       )}
-
     </div>
   )
 }

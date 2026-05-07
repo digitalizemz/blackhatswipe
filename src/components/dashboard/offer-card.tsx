@@ -1,24 +1,24 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { SupabaseOffer } from '@/types/offer'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 
+// Fallback gradient when no thumbnail
 const gradientMap: Record<string, string> = {
-  blue:    'from-blue-900 to-blue-700',
-  purple:  'from-purple-900 to-purple-700',
-  red:     'from-red-900 to-red-700',
-  green:   'from-green-900 to-green-700',
-  pink:    'from-pink-900 to-pink-700',
-  emerald: 'from-emerald-900 to-emerald-700',
-  orange:  'from-orange-900 to-orange-700',
-  indigo:  'from-indigo-900 to-indigo-700',
-  amber:   'from-amber-900 to-amber-700',
-  teal:    'from-teal-900 to-teal-700',
-  lime:    'from-lime-900 to-lime-700',
-  yellow:  'from-yellow-900 to-yellow-700',
+  blue:    'from-blue-950 to-blue-900',
+  purple:  'from-purple-950 to-purple-900',
+  red:     'from-red-950 to-red-900',
+  green:   'from-green-950 to-green-900',
+  pink:    'from-pink-950 to-pink-900',
+  emerald: 'from-emerald-950 to-emerald-900',
+  orange:  'from-orange-950 to-orange-900',
+  indigo:  'from-indigo-950 to-indigo-900',
+  amber:   'from-amber-950 to-amber-900',
+  teal:    'from-teal-950 to-teal-900',
+  lime:    'from-lime-950 to-lime-900',
+  yellow:  'from-yellow-950 to-yellow-900',
 }
 const gradientKeys = Object.keys(gradientMap)
 
@@ -26,6 +26,24 @@ function deriveGradient(id: string): string {
   const hex = id.replace(/-/g, '')
   const num = parseInt(hex.slice(-2), 16)
   return gradientMap[gradientKeys[num % gradientKeys.length]]
+}
+
+const SCALING_BADGE: Record<string, { cls: string; label: string }> = {
+  scaling: { cls: 'bg-green-500 text-white',  label: '🚀 Scaling' },
+  testing: { cls: 'bg-yellow-500 text-black', label: '🧪 Testing' },
+  paused:  { cls: 'bg-zinc-600 text-white',   label: '⏸ Paused'  },
+  dead:    { cls: 'bg-red-700 text-white',    label: '💀 Dead'    },
+}
+
+function formatCurrency(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(1)}k`
+  if (n >= 100) return `$${n.toFixed(0)}`
+  return `$${n.toFixed(2)}`
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 interface OfferCardProps {
@@ -38,29 +56,39 @@ interface OfferCardProps {
 export default function OfferCard({ offer, winning = false, locked = false, onLockedClick }: OfferCardProps) {
   const router = useRouter()
 
-  const gradientClass  = deriveGradient(offer.id)
-  const creativesCount = (offer.offer_files ?? []).filter(f => f.folder_name === '__creatives__').length
-  const totalViews     = offer.total_views ?? 0
-  const dailySpend     = offer.estimated_daily_spend ?? 0
+  // Creative stats computed from the joined offer_files
+  const creativeFiles  = (offer.offer_files ?? []).filter(f => f.folder_name === '__creatives__')
+  const creativesCount = creativeFiles.length
+  const cpmsWithValue  = creativeFiles.filter(f => (f.cpm_estimated ?? 0) > 0)
+  const avgCpm         = cpmsWithValue.length > 0
+    ? cpmsWithValue.reduce((s, f) => s + (f.cpm_estimated ?? 0), 0) / cpmsWithValue.length
+    : 0
+  const totalInitViews = creativeFiles.reduce((s, f) => s + (f.initial_views ?? 0), 0)
+  const estSpend       = totalInitViews > 0 && avgCpm > 0 ? (totalInitViews / 1000) * avgCpm : 0
 
   const nicheName   = offer.niches?.name ?? ''
+  const nicheColor  = offer.niches?.color ?? '#facc15'
   const typeName    = offer.offer_types?.name ?? ''
   const trafficName = offer.traffic_sources?.name ?? ''
   const langDisplay = offer.languages
     ? `${offer.languages.flag_emoji ?? ''} ${offer.languages.name}`.trim()
     : ''
 
+  const scalingBadge = SCALING_BADGE[offer.scaling_status ?? 'testing'] ?? SCALING_BADGE.testing
+  const gradientCls  = deriveGradient(offer.id)
+
   return (
     <div
       className={cn(
-        'bg-[#0D0D0D] border border-[#1C1C1C] rounded-xl overflow-hidden hover:border-zinc-700 transition-all duration-200 cursor-pointer flex flex-col relative',
-        locked && 'opacity-75'
+        'bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl overflow-hidden cursor-pointer flex flex-col',
+        'hover:border-yellow-400/20 hover:shadow-lg hover:shadow-yellow-400/5 transition-all duration-200',
+        locked && 'opacity-80'
       )}
       onClick={() => locked ? onLockedClick?.() : router.push(`/dashboard/offers/${offer.id}`)}
       title={locked ? 'Upgrade to unlock' : undefined}
     >
-      {/* ── Thumbnail ── */}
-      <div className={cn('h-52 bg-gradient-to-br relative shrink-0', gradientClass)}>
+      {/* ── Cover Image ── */}
+      <div className={cn('relative h-[200px] bg-gradient-to-br shrink-0 overflow-hidden', gradientCls)}>
         {offer.thumbnail_url && (
           <img
             src={offer.thumbnail_url}
@@ -69,99 +97,108 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
           />
         )}
 
-        {/* Status badge — top-left */}
-        <div className="absolute top-2 left-2">
-          {winning || offer.is_winning ? (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-yellow-400/80 text-black">
-              💀 Steal
-            </span>
-          ) : (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-500/80 text-white">
-              New
-            </span>
-          )}
+        {/* Bottom gradient + title */}
+        <div
+          className="absolute inset-0 flex items-end px-4 pb-3"
+          style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.3) 40%, transparent 65%)' }}
+        >
+          <p className={cn('text-white font-bold text-lg leading-tight line-clamp-2', locked && 'blur-sm select-none')}>
+            {offer.title}
+          </p>
         </div>
 
-        {/* Lock icon — top-right */}
-        {locked && (
-          <div className="absolute top-2 right-2 z-10 text-lg leading-none select-none">
-            🔒
+        {/* Type badge — top-left */}
+        {typeName && (
+          <div className="absolute top-2 left-2">
+            <span className="bg-black/60 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md font-medium tracking-wide">
+              {typeName.toUpperCase()}
+            </span>
           </div>
         )}
 
-        {/* Metrics overlay — bottom-left */}
-        <div className="absolute bottom-2 left-2 flex flex-col gap-1">
+        {/* Top-right: lock or scaling badge */}
+        <div className="absolute top-2 right-2">
           {locked ? (
-            <>
-              <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className="text-sm font-semibold text-zinc-500">👁 ??</span>
-              </div>
-              <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                <span className="text-sm font-semibold text-zinc-600">~$??/day</span>
-              </div>
-            </>
+            <span className="text-lg leading-none select-none drop-shadow">🔒</span>
           ) : (
-            <>
-              {totalViews > 0 && (
-                <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                  <span className="text-sm font-semibold text-white/80">👁 {totalViews.toLocaleString()} views</span>
-                </div>
-              )}
-              {dailySpend > 0 && (
-                <div className="bg-black/70 backdrop-blur-sm rounded-md px-2 py-1">
-                  <span className="text-sm font-semibold text-green-400">~${dailySpend.toLocaleString()}/day est.</span>
-                </div>
-              )}
-            </>
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full shadow-sm ${scalingBadge.cls}`}>
+              {scalingBadge.label}
+            </span>
           )}
         </div>
       </div>
 
-      {/* ── Card body ── */}
-      <div className="p-4 flex flex-col flex-1">
-        <p className={`text-base font-semibold text-white leading-snug mb-2 line-clamp-2 ${locked ? 'blur-sm select-none' : ''}`}>
-          {offer.title}
-        </p>
+      {/* ── Card Body ── */}
+      <div className="p-4 flex flex-col flex-1 gap-3">
 
-        <div className="flex flex-wrap gap-1.5 mb-2">
+        {/* ROW 1 — Tags */}
+        <div className="flex gap-1.5 flex-wrap">
           {trafficName && (
-            <span className="text-xs px-2.5 py-1 bg-zinc-800 text-zinc-300 rounded-md flex items-center gap-1.5">
-              <TrafficIcon name={trafficName} size={12} />
+            <span className="bg-[#1A1A1A] text-zinc-300 text-xs px-2 py-1 rounded-md flex items-center gap-1.5">
+              <TrafficIcon name={trafficName} size={11} />
               {trafficName}
             </span>
           )}
-          {[typeName, nicheName].filter(Boolean).map((tag) => (
-            <span key={tag} className="text-xs px-2.5 py-1 bg-zinc-800 text-zinc-300 rounded-md">
-              {tag}
+          {nicheName && (
+            <span className="bg-[#1A1A1A] text-zinc-300 text-xs px-2 py-1 rounded-md flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: nicheColor }} />
+              {nicheName}
             </span>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between mb-2.5">
-          <span className="text-xs text-zinc-500">{langDisplay}</span>
-          {creativesCount > 0 && (
-            <span className="text-xs text-zinc-500">
-              {creativesCount} creative{creativesCount !== 1 ? 's' : ''}
+          )}
+          {langDisplay && (
+            <span className="bg-[#1A1A1A] text-zinc-300 text-xs px-2 py-1 rounded-md">
+              {langDisplay}
+            </span>
+          )}
+          {winning && (
+            <span className="bg-yellow-400/10 text-yellow-400 border border-yellow-400/20 text-xs px-2 py-1 rounded-md">
+              💀 Steal
             </span>
           )}
         </div>
 
-        {locked ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); onLockedClick?.() }}
-            className="mt-auto w-full h-10 text-sm font-medium border border-yellow-400/20 text-yellow-400/70 rounded-lg cursor-pointer transition-all duration-200 flex items-center justify-center gap-1.5 hover:border-yellow-400/40 hover:text-yellow-400"
-          >
-            🔒 Upgrade to Unlock
-          </button>
-        ) : (
-          <Link
-            href={`/dashboard/offers/${offer.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="mt-auto w-full h-10 text-sm font-medium border border-zinc-700 text-zinc-300 rounded-lg hover:border-yellow-400 hover:text-yellow-400 cursor-pointer transition-all duration-200 flex items-center justify-center"
-          >
-            View Details →
-          </Link>
-        )}
+        {/* ROW 2 — Quick Stats */}
+        <div className="bg-[#111111] rounded-xl p-3 grid grid-cols-3 divide-x divide-zinc-800">
+          <div className="text-center px-2">
+            <p className={cn('text-white font-bold text-sm', locked && 'blur-sm select-none')}>
+              {locked ? '??' : creativesCount || '—'}
+            </p>
+            <p className="text-zinc-500 text-[11px] mt-0.5">🎬 Creatives</p>
+          </div>
+          <div className="text-center px-2">
+            <p className={cn('text-white font-bold text-sm', locked && 'blur-sm select-none')}>
+              {locked ? '??' : avgCpm > 0 ? `$${avgCpm.toFixed(2)}` : '—'}
+            </p>
+            <p className="text-zinc-500 text-[11px] mt-0.5">📡 Avg CPM</p>
+          </div>
+          <div className="text-center px-2">
+            <p className={cn('text-white font-bold text-sm', locked && 'blur-sm select-none')}>
+              {locked ? '??' : estSpend > 0 ? formatCurrency(estSpend) : '—'}
+            </p>
+            <p className="text-zinc-500 text-[11px] mt-0.5">💸 Est. Spend</p>
+          </div>
+        </div>
+
+        {/* ROW 3 — Footer */}
+        <div className="flex justify-between items-center mt-auto">
+          {locked ? (
+            <span
+              onClick={(e) => { e.stopPropagation(); onLockedClick?.() }}
+              className="text-xs text-yellow-400/70 hover:text-yellow-400 transition-colors cursor-pointer"
+            >
+              🔒 Upgrade to unlock
+            </span>
+          ) : (
+            <span className="text-xs text-zinc-600">
+              🗓 Added {formatDate(offer.created_at)}
+            </span>
+          )}
+          {!locked && (
+            <span className="text-yellow-400 text-xs font-medium hover:text-yellow-300 transition-colors">
+              View Offer →
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )

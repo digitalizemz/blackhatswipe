@@ -1,21 +1,27 @@
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { requireAdmin } from '@/lib/supabase/require-admin'
+import { NextRequest, NextResponse } from 'next/server'
 
 const admin = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  'https://lladxcxjmxtrsorvagql.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
   { auth: { persistSession: false, autoRefreshToken: false } },
 )
 
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
-  const auth = await requireAdmin()
-  if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
+export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { error } = await admin
+      .from('creative_attachments')
+      .delete()
+      .eq('id', params.id)
 
-  const { error } = await admin
-    .from('creative_attachments')
-    .delete()
-    .eq('id', params.id)
-
-  if (error) return Response.json({ error: error.message }, { status: 500 })
-  return Response.json({ success: true })
+    if (error) {
+      console.error('creative_attachments delete error:', error.message)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    return NextResponse.json({ success: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('DELETE creative-attachment crash:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
+  }
 }

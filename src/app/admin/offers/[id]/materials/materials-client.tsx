@@ -8,10 +8,19 @@ import type { OfferFile } from '@/types/offer'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const CREATIVE_STATUS_OPTIONS = [
+  { value: 'testing',   label: '🧪 Testing',   sel: 'bg-yellow-400/20 text-yellow-400 border-yellow-400/50' },
+  { value: 'scaling',   label: '🚀 Scaling',   sel: 'bg-green-400/20 text-green-400 border-green-400/50'   },
+  { value: 'paused',    label: '⏸ Paused',    sel: 'bg-zinc-700/50 text-zinc-400 border-zinc-600'          },
+  { value: 'saturated', label: '💀 Saturated', sel: 'bg-red-900/30 text-red-400 border-red-800'             },
+] as const
+
 const inputCls =
   'bg-[#111111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm w-full ' +
   'focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 ' +
   'placeholder:text-zinc-600 transition-colors'
+
+const sectionHeaderCls = 'text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3'
 
 const SCRAPE_STATUS_CLS: Record<string, string> = {
   active:   'text-green-400 bg-green-400/10 border-green-400/20',
@@ -24,12 +33,7 @@ const DEFAULT_FOLDERS = ['Ads', 'VSL', 'Checkout', 'Transcriptions']
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
-interface FolderState {
-  name: string
-  expanded: boolean
-  showAddLink: boolean
-  uploading: boolean
-}
+interface FolderState { name: string; expanded: boolean; showAddLink: boolean; uploading: boolean }
 interface LinkForm { name: string; url: string }
 interface LookupOption { id: string; name: string; flag_emoji?: string | null }
 interface OfferMeta { niche_id: string | null; language_id: string | null; traffic_source_id: string | null }
@@ -44,7 +48,7 @@ interface CreativeAttachment {
   created_at: string
 }
 
-// ─── Admin API helpers (service-role) ─────────────────────────────────────────
+// ─── API helpers ──────────────────────────────────────────────────────────────
 
 async function apiUpload(file: File, bucket: string, path: string): Promise<string> {
   const form = new FormData()
@@ -65,14 +69,6 @@ async function apiInsertOfferFile(body: Record<string, unknown>): Promise<{ data
   return { data: (json.data as OfferFile) ?? null, error: json.error ?? null }
 }
 
-async function apiUpdateOfferFile(id: string, updates: Record<string, unknown>): Promise<{ data: OfferFile | null; error: string | null }> {
-  const res  = await fetch(`/api/admin/materials/offer-files/${id}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates),
-  })
-  const json = await res.json()
-  return { data: (json.data as OfferFile) ?? null, error: json.error ?? null }
-}
-
 async function apiDeleteOfferFile(id: string): Promise<void> {
   await fetch(`/api/admin/materials/offer-files/${id}`, { method: 'DELETE' })
 }
@@ -80,7 +76,7 @@ async function apiDeleteOfferFile(id: string): Promise<void> {
 async function apiListAttachments(creativeId: string): Promise<CreativeAttachment[]> {
   const res  = await fetch(`/api/admin/materials/creative-attachments?creative_id=${creativeId}`)
   const json = await res.json()
-  return (json.data as CreativeAttachment[]) ?? []
+  return (json.attachments as CreativeAttachment[]) ?? []
 }
 
 async function apiUploadAttachment(file: File, creativeId: string): Promise<CreativeAttachment | null> {
@@ -97,7 +93,7 @@ async function apiDeleteAttachment(id: string): Promise<void> {
   await fetch(`/api/admin/materials/creative-attachments/${id}`, { method: 'DELETE' })
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getFileIcon(fileType: string | null, fileName: string): string {
   if (fileType === 'link') return '🔗'
@@ -106,16 +102,6 @@ function getFileIcon(fileType: string | null, fileName: string): string {
   if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return '🖼'
   if (ext === 'pdf') return '📄'
   if (['doc', 'docx'].includes(ext)) return '📝'
-  return '📎'
-}
-
-function getAttachmentIcon(fileType: string | null): string {
-  if (!fileType) return '📎'
-  const t = fileType.toLowerCase()
-  if (['mp4', 'mov', 'webm', 'video'].includes(t)) return '🎬'
-  if (['jpg', 'jpeg', 'png', 'webp', 'gif', 'image'].includes(t)) return '🖼'
-  if (t === 'pdf') return '📄'
-  if (['doc', 'docx'].includes(t)) return '📝'
   return '📎'
 }
 
@@ -139,12 +125,21 @@ function isVideoUrl(url: string, fileType: string | null) {
   return fileType === 'video' || /\.(mp4|mov|webm)$/i.test(url)
 }
 
+function isAttachmentImage(a: CreativeAttachment) {
+  const ext = a.name.split('.').pop()?.toLowerCase() ?? ''
+  return ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) || a.file_type === 'image'
+}
+
+function isAttachmentVideo(a: CreativeAttachment) {
+  const ext = a.name.split('.').pop()?.toLowerCase() ?? ''
+  return ['mp4', 'mov', 'webm'].includes(ext) || a.file_type === 'video'
+}
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
 function Toast({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
   return (
-    <div
-      onClick={onDismiss}
+    <div onClick={onDismiss}
       className="fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-2xl border bg-green-900/90 border-green-700/60 text-green-300 cursor-pointer"
     >
       ✓ {msg}
@@ -152,11 +147,9 @@ function Toast({ msg, onDismiss }: { msg: string; onDismiss: () => void }) {
   )
 }
 
-// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+// ─── Delete Confirmation Modal ─────────────────────────────────────────────────
 
-function DeleteConfirmModal({
-  name, busy, onConfirm, onCancel,
-}: {
+function DeleteConfirmModal({ name, busy, onConfirm, onCancel }: {
   name: string; busy: boolean; onConfirm: () => void; onCancel: () => void
 }) {
   useEffect(() => {
@@ -172,7 +165,7 @@ function DeleteConfirmModal({
         <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
           This will permanently delete{' '}
           <span className="text-white font-medium">{name || 'this creative'}</span>{' '}
-          and all its scraping history.
+          and all its history.
         </p>
         <div className="flex gap-2">
           <button onClick={onConfirm} disabled={busy}
@@ -187,7 +180,104 @@ function DeleteConfirmModal({
   )
 }
 
-// ─── Edit Creative Modal ──────────────────────────────────────────────────────
+// ─── Creative Variants Grid ────────────────────────────────────────────────────
+
+function VariantsGrid({
+  attachments, uploading, onUpload, onDelete, fileInputRef,
+}: {
+  attachments: CreativeAttachment[]
+  uploading: boolean
+  onUpload: (files: File[]) => void
+  onDelete: (id: string) => void
+  fileInputRef: React.RefObject<HTMLInputElement>
+}) {
+  return (
+    <div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="image/*,video/*,.gif"
+        className="hidden"
+        onChange={e => {
+          const files = Array.from(e.target.files ?? [])
+          e.target.value = ''
+          if (files.length) onUpload(files)
+        }}
+      />
+
+      {attachments.length === 0 ? (
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="border border-dashed border-zinc-700 rounded-lg p-6 text-center cursor-pointer hover:border-yellow-400/50 transition-colors"
+        >
+          {uploading ? (
+            <p className="text-xs text-zinc-500">Uploading…</p>
+          ) : (
+            <>
+              <p className="text-sm text-zinc-500 mb-1">Click to upload images or videos</p>
+              <p className="text-xs text-zinc-700">JPG, PNG, WEBP, GIF, MP4, MOV</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {attachments.map(a => (
+              <div key={a.id} className="bg-[#111] border border-[#1C1C1C] rounded-lg overflow-hidden group relative">
+                {/* Preview */}
+                {isAttachmentImage(a) ? (
+                  <div className="aspect-video bg-zinc-900 overflow-hidden">
+                    <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
+                  </div>
+                ) : isAttachmentVideo(a) ? (
+                  <div className="aspect-video bg-zinc-900 relative overflow-hidden">
+                    <video src={a.url} className="w-full h-full object-cover" muted preload="metadata" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <div className="w-8 h-8 rounded-full bg-white/90 flex items-center justify-center">
+                        <span className="text-black text-xs ml-0.5">▶</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-zinc-900 flex items-center justify-center">
+                    <span className="text-2xl opacity-40">📎</span>
+                  </div>
+                )}
+
+                {/* Info + actions */}
+                <div className="px-2.5 py-2 flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] text-zinc-300 truncate">{a.name}</p>
+                    <p className="text-[10px] text-zinc-600">{formatBytes(a.file_size)}</p>
+                  </div>
+                  <a href={a.url} download target="_blank" rel="noopener noreferrer"
+                    className="text-zinc-600 hover:text-yellow-400 transition-colors text-sm shrink-0"
+                    title="Download"
+                  >↓</a>
+                  <button onClick={() => onDelete(a.id)}
+                    className="text-zinc-700 hover:text-red-400 text-base leading-none cursor-pointer shrink-0 transition-colors"
+                    title="Delete"
+                  >×</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-full border border-dashed border-zinc-700 text-zinc-500 hover:border-yellow-400/50 hover:text-yellow-400 text-xs py-2.5 rounded-lg cursor-pointer transition-colors disabled:opacity-50"
+          >
+            {uploading ? 'Uploading…' : '+ Add more variants'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Edit Creative Modal ───────────────────────────────────────────────────────
 
 function EditCreativeModal({
   creative, niches, languages, trafficSources, offerMeta,
@@ -210,22 +300,27 @@ function EditCreativeModal({
   const [mediaUrl,     setMediaUrl]     = useState(creative.file_url)
   const [postUrl,      setPostUrl]      = useState(creative.post_url ?? '')
   const [cpm,          setCpm]          = useState(creative.cpm_estimated ? String(creative.cpm_estimated) : '')
-  const [targetMarket, setTargetMarket] = useState(
-    languages.find(l => l.name === creative.target_market)?.id ?? ''
-  )
   const [nicheId,      setNicheId]      = useState(offerMeta.niche_id ?? '')
   const [languageId,   setLanguageId]   = useState(offerMeta.language_id ?? '')
   const [trafficId,    setTrafficId]    = useState(offerMeta.traffic_source_id ?? '')
   const [scrapeStatus, setScrapeStatus] = useState<'no_url' | 'active' | 'inactive' | 'paused' | null>(
     creative.scrape_status ?? 'no_url'
   )
-  const [saving, setSaving] = useState(false)
+  const [creativeStatus, setCreativeStatus] = useState(creative.creative_status ?? 'testing')
 
-  // Attachments
-  const attachFileRef = useRef<HTMLInputElement>(null)
-  const [attachments,        setAttachments]        = useState<CreativeAttachment[]>([])
-  const [loadingAttachments, setLoadingAttachments] = useState(true)
-  const [uploadingAttach,    setUploadingAttach]    = useState(false)
+  // Initial snapshot
+  const [initViews,    setInitViews]    = useState(creative.initial_views    != null ? String(creative.initial_views)    : '')
+  const [initLikes,    setInitLikes]    = useState(creative.initial_likes    != null ? String(creative.initial_likes)    : '')
+  const [initComments, setInitComments] = useState(creative.initial_comments != null ? String(creative.initial_comments) : '')
+
+  const [saving,    setSaving]    = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Variants (creative_attachments)
+  const variantFileRef = useRef<HTMLInputElement>(null!)
+  const [variants,         setVariants]         = useState<CreativeAttachment[]>([])
+  const [loadingVariants,  setLoadingVariants]  = useState(true)
+  const [uploadingVariant, setUploadingVariant] = useState(false)
 
   const ytId    = extractYouTubeId(mediaUrl)
   const isImage = isImageUrl(mediaUrl, type)
@@ -239,8 +334,8 @@ function EditCreativeModal({
 
   useEffect(() => {
     apiListAttachments(creative.id).then(data => {
-      setAttachments(data)
-      setLoadingAttachments(false)
+      setVariants(data)
+      setLoadingVariants(false)
     })
   }, [creative.id])
 
@@ -248,36 +343,69 @@ function EditCreativeModal({
 
   async function handleSave() {
     setSaving(true)
-    const langName  = languages.find(l => l.id === targetMarket)?.name ?? null
+    setSaveError(null)
     const fileName  = `${name.trim() || 'Creative'}${angle.trim() ? ` | ${angle.trim()}` : ''}`
     const newStatus = postUrl.trim()
       ? (scrapeStatus === 'no_url' ? 'active' : scrapeStatus)
       : 'no_url'
-    const { error } = await onSave(creative.id, {
-      file_name:     fileName,
-      file_type:     type,
-      file_url:      mediaUrl.trim(),
-      post_url:      postUrl.trim() || null,
-      cpm_estimated: cpm ? parseFloat(cpm) : null,
-      target_market: langName,
-      scrape_status: newStatus,
-    })
-    setSaving(false)
-    if (!error) onClose()
-  }
 
-  async function handleAttachUpload(file: File) {
-    setUploadingAttach(true)
     try {
-      const record = await apiUploadAttachment(file, creative.id)
-      if (record) setAttachments(prev => [record, ...prev])
-    } catch { /* ignore upload error — toast shown via API response */ }
-    setUploadingAttach(false)
+      const res  = await fetch('/api/admin/update-creative', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          id:               creative.id,
+          file_name:        fileName,
+          file_type:        type,
+          file_url:         mediaUrl.trim(),
+          post_url:         postUrl.trim() || null,
+          cpm_estimated:    cpm ? parseFloat(cpm) : null,
+          scrape_status:    newStatus,
+          creative_status:  creativeStatus,
+          initial_views:    initViews    ? parseInt(initViews)    : null,
+          initial_likes:    initLikes    ? parseInt(initLikes)    : null,
+          initial_comments: initComments ? parseInt(initComments) : null,
+        }),
+      })
+      const json = await res.json()
+      if (json.error) {
+        setSaveError(json.error)
+      } else {
+        await onSave(creative.id, json.creative ?? {})
+        onClose()
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Save failed')
+    }
+    setSaving(false)
   }
 
-  async function handleAttachDelete(attachId: string) {
+  async function handleVariantUpload(files: File[]) {
+    setUploadingVariant(true)
+    setSaveError(null)
+    for (const file of files) {
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('creative_id', creative.id)
+        fd.append('name', file.name)
+        const res  = await fetch('/api/admin/materials/creative-attachments', { method: 'POST', body: fd })
+        const json = await res.json()
+        if (json.error) {
+          setSaveError(`Upload failed: ${json.error}`)
+        } else if (json.data) {
+          setVariants(prev => [json.data as CreativeAttachment, ...prev])
+        }
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Upload failed')
+      }
+    }
+    setUploadingVariant(false)
+  }
+
+  async function handleVariantDelete(attachId: string) {
     await apiDeleteAttachment(attachId)
-    setAttachments(prev => prev.filter(a => a.id !== attachId))
+    setVariants(prev => prev.filter(a => a.id !== attachId))
   }
 
   const statusKey = scrapeStatus ?? 'no_url'
@@ -297,7 +425,7 @@ function EditCreativeModal({
         {/* Body */}
         <div className="flex flex-1 overflow-hidden min-h-0">
 
-          {/* Left: preview + status */}
+          {/* Left: preview + scrape status */}
           <div className="w-56 shrink-0 border-r border-[#1A1A1A] flex flex-col">
             <div className="flex-1 bg-zinc-950 flex items-center justify-center overflow-hidden min-h-0">
               {ytId ? (
@@ -337,8 +465,8 @@ function EditCreativeModal({
             </div>
           </div>
 
-          {/* Right: form */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {/* Right: scrollable form */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
             {/* Name */}
             <div>
@@ -378,32 +506,64 @@ function EditCreativeModal({
               </label>
               <input type="url" value={postUrl} onChange={e => setPostUrl(e.target.value)}
                 placeholder="https://facebook.com/watch/?v=..." className={inputCls} />
-              <p className="text-[10px] text-zinc-600 mt-1">Used for automatic scraping of views, likes and comments</p>
+              <p className="text-[10px] text-zinc-600 mt-1">Used for automatic scraping</p>
             </div>
 
-            {/* CPM + Target Market */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">CPM Estimated</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">$</span>
-                  <input type="number" step="0.01" min="0" value={cpm} onChange={e => setCpm(e.target.value)}
-                    placeholder="e.g. 8 for LATAM, 25 for USA" className={`${inputCls} pl-7`} />
-                </div>
+            {/* CPM */}
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">CPM Estimated</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">$</span>
+                <input type="number" step="0.01" min="0" value={cpm} onChange={e => setCpm(e.target.value)}
+                  placeholder="e.g. 8 for LATAM, 25 for USA" className={`${inputCls} pl-7`} />
               </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Target Market</label>
-                <select value={targetMarket} onChange={e => setTargetMarket(e.target.value)} className={`${inputCls} cursor-pointer`}>
-                  <option value="">Select market…</option>
-                  {languages.map(l => (
-                    <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
-                  ))}
-                </select>
+            </div>
+
+            {/* Creative Status */}
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-2">Creative Status</label>
+              <div className="flex gap-2 flex-wrap">
+                {CREATIVE_STATUS_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setCreativeStatus(opt.value)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-colors ${
+                      creativeStatus === opt.value
+                        ? opt.sel
+                        : 'bg-transparent text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── Initial Snapshot ── */}
+            <div className="border-t border-[#1A1A1A] pt-4">
+              <p className={sectionHeaderCls}>📊 Initial Snapshot (manual)</p>
+              <p className="text-[10px] text-zinc-600 mb-3">Fill in from the ad screenshot — scraping will update later</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Views</label>
+                  <input type="number" min="0" value={initViews} onChange={e => setInitViews(e.target.value)}
+                    placeholder="0" className={inputCls} />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Likes</label>
+                  <input type="number" min="0" value={initLikes} onChange={e => setInitLikes(e.target.value)}
+                    placeholder="0" className={inputCls} />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Comments</label>
+                  <input type="number" min="0" value={initComments} onChange={e => setInitComments(e.target.value)}
+                    placeholder="0" className={inputCls} />
+                </div>
               </div>
             </div>
 
             {/* Inherited from offer */}
-            <div className="pt-1">
+            <div>
               <p className="text-[10px] uppercase tracking-widest text-zinc-600 mb-2">Inherited from offer (context only)</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -423,7 +583,7 @@ function EditCreativeModal({
                   </select>
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Traffic Source</label>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Traffic</label>
                   <select value={trafficId} onChange={e => setTrafficId(e.target.value)} className={`${inputCls} cursor-pointer opacity-60`}>
                     <option value="">— none —</option>
                     {trafficSources.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -432,86 +592,56 @@ function EditCreativeModal({
               </div>
             </div>
 
-            {/* ── Additional Files ── */}
-            <div className="pt-2">
-              <div className="border-t border-[#1A1A1A] pt-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="text-xs font-semibold text-zinc-300">📎 Additional Files</p>
-                    <p className="text-[10px] text-zinc-600 mt-0.5">Screenshots, metrics, ad copies, reference docs...</p>
-                  </div>
-                  <input
-                    ref={attachFileRef}
-                    type="file"
-                    multiple
-                    accept="image/*,.pdf,.doc,.docx,.mp4,.mov,.txt,.csv,.xlsx"
-                    className="hidden"
-                    onChange={async e => {
-                      const files = Array.from(e.target.files ?? [])
-                      e.target.value = ''
-                      for (const f of files) await handleAttachUpload(f)
-                    }}
-                  />
+            {/* ── Creative Variants ── */}
+            <div className="border-t border-[#1A1A1A] pt-4">
+              <div className="flex items-center justify-between mb-1">
+                <p className={sectionHeaderCls}>🎨 Creative Variants</p>
+                {!loadingVariants && variants.length > 0 && (
                   <button
-                    onClick={() => attachFileRef.current?.click()}
-                    disabled={uploadingAttach}
+                    onClick={() => variantFileRef.current?.click()}
+                    disabled={uploadingVariant}
                     className="text-xs border border-zinc-700 text-zinc-400 hover:border-yellow-400 hover:text-yellow-400 px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-50 transition-colors"
                   >
-                    {uploadingAttach ? 'Uploading…' : '↑ Upload'}
+                    {uploadingVariant ? 'Uploading…' : '↑ Upload'}
                   </button>
-                </div>
-
-                {loadingAttachments ? (
-                  <p className="text-[11px] text-zinc-600 py-2">Loading…</p>
-                ) : attachments.length === 0 ? (
-                  <div
-                    className="border border-dashed border-zinc-800 rounded-lg p-4 text-center cursor-pointer hover:border-zinc-600 transition-colors"
-                    onClick={() => attachFileRef.current?.click()}
-                  >
-                    <p className="text-xs text-zinc-600">Click to upload files</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {attachments.map(a => (
-                      <div key={a.id} className="flex items-center gap-2.5 bg-[#111] border border-[#1C1C1C] rounded-lg px-3 py-2 group">
-                        <span className="text-base shrink-0">{getAttachmentIcon(a.file_type)}</span>
-                        <div className="flex-1 min-w-0">
-                          <a href={a.url} target="_blank" rel="noopener noreferrer"
-                            className="text-xs text-zinc-300 hover:text-yellow-400 truncate block transition-colors"
-                            onClick={e => e.stopPropagation()}
-                          >
-                            {a.name}
-                          </a>
-                          {a.file_size && (
-                            <p className="text-[10px] text-zinc-600">{formatBytes(a.file_size)}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleAttachDelete(a.id)}
-                          className="text-zinc-700 hover:text-red-400 text-lg leading-none cursor-pointer shrink-0 transition-colors opacity-0 group-hover:opacity-100"
-                        >×</button>
-                      </div>
-                    ))}
-                  </div>
                 )}
               </div>
+              <p className="text-[10px] text-zinc-600 mb-3">Alternative images or videos for this creative</p>
+              {loadingVariants ? (
+                <p className="text-[11px] text-zinc-600 py-2">Loading…</p>
+              ) : (
+                <VariantsGrid
+                  attachments={variants}
+                  uploading={uploadingVariant}
+                  onUpload={handleVariantUpload}
+                  onDelete={handleVariantDelete}
+                  fileInputRef={variantFileRef}
+                />
+              )}
             </div>
 
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-[#1A1A1A] shrink-0">
-          <button onClick={() => onDelete(creative)}
-            className="text-sm text-red-400 hover:text-red-300 transition-colors cursor-pointer"
-          >Delete Creative</button>
-          <div className="flex gap-2">
-            <button onClick={onClose}
-              className="border border-zinc-700 text-zinc-400 h-10 px-4 rounded-lg cursor-pointer hover:border-zinc-500 hover:text-white transition-colors text-sm"
-            >Cancel</button>
-            <button onClick={handleSave} disabled={saving}
-              className="bg-yellow-400 text-black font-semibold h-10 px-5 rounded-lg cursor-pointer hover:brightness-110 disabled:opacity-60 transition-all text-sm"
-            >{saving ? 'Saving…' : 'Save Changes'}</button>
+        <div className="border-t border-[#1A1A1A] shrink-0">
+          {saveError && (
+            <div className="px-5 py-2.5 bg-red-950/60 border-b border-red-800/40">
+              <p className="text-xs text-red-400">⚠ {saveError}</p>
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-3 px-5 py-4">
+            <button onClick={() => onDelete(creative)}
+              className="text-sm text-red-400 hover:text-red-300 transition-colors cursor-pointer"
+            >Delete Creative</button>
+            <div className="flex gap-2">
+              <button onClick={onClose}
+                className="border border-zinc-700 text-zinc-400 h-10 px-4 rounded-lg cursor-pointer hover:border-zinc-500 hover:text-white transition-colors text-sm"
+              >Cancel</button>
+              <button onClick={handleSave} disabled={saving}
+                className="bg-yellow-400 text-black font-semibold h-10 px-5 rounded-lg cursor-pointer hover:brightness-110 disabled:opacity-60 transition-all text-sm"
+              >{saving ? 'Saving…' : 'Save Changes'}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -519,11 +649,9 @@ function EditCreativeModal({
   )
 }
 
-// ─── Creative card ────────────────────────────────────────────────────────────
+// ─── Creative Card ─────────────────────────────────────────────────────────────
 
-function CreativeCard({
-  creative, onEdit, onDelete,
-}: {
+function CreativeCard({ creative, onEdit, onDelete }: {
   creative: OfferFile
   onEdit: (c: OfferFile) => void
   onDelete: (c: OfferFile) => void
@@ -535,7 +663,6 @@ function CreativeCard({
 
   return (
     <div className="bg-[#111111] border border-[#1C1C1C] rounded-xl overflow-hidden hover:border-zinc-600 transition-colors">
-      {/* Media preview */}
       <div className="aspect-[4/3] relative bg-zinc-900 cursor-pointer" onClick={() => onEdit(creative)}>
         {ytId ? (
           <>
@@ -577,14 +704,11 @@ function CreativeCard({
               creative.file_type === 'video' ? 'bg-blue-500/80 text-white' :
               creative.file_type === 'image' ? 'bg-purple-500/80 text-white' :
               'bg-zinc-700/80 text-zinc-300'
-            }`}>
-              {creative.file_type}
-            </span>
+            }`}>{creative.file_type}</span>
           )}
         </div>
       </div>
 
-      {/* Info + actions */}
       <div className="px-3 py-2.5">
         {angle && <p className="text-xs text-zinc-500 truncate mb-2">{angle}</p>}
         <div className="flex items-center justify-between gap-2">
@@ -607,7 +731,7 @@ function CreativeCard({
   )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function MaterialsClient({ offerId }: { offerId: string }) {
   const router   = useRouter()
@@ -619,13 +743,11 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   const [loading,    setLoading]    = useState(true)
   const [toast,      setToast]      = useState<string | null>(null)
 
-  // Lookup data
   const [niches,         setNiches]         = useState<LookupOption[]>([])
   const [languages,      setLanguages]      = useState<LookupOption[]>([])
   const [trafficSources, setTrafficSources] = useState<LookupOption[]>([])
   const [offerMeta,      setOfferMeta]      = useState<OfferMeta>({ niche_id: null, language_id: null, traffic_source_id: null })
 
-  // Creatives
   const [creatives,    setCreatives]    = useState<OfferFile[]>([])
   const [showAddForm,  setShowAddForm]  = useState(false)
   const [creativeName, setCreativeName] = useState('')
@@ -637,26 +759,26 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   const [creativeUploading, setCreativeUploading] = useState(false)
   const [savingCreative,    setSavingCreative]    = useState(false)
 
-  // Add form — extra fields
-  const [addPostUrl,      setAddPostUrl]      = useState('')
-  const [addCpm,          setAddCpm]          = useState('')
-  const [addTargetMarket, setAddTargetMarket] = useState('')
-  const [addNicheId,      setAddNicheId]      = useState('')
-  const [addLanguageId,   setAddLanguageId]   = useState('')
-  const [addTrafficId,    setAddTrafficId]    = useState('')
+  // Add form fields
+  const [addCreativeStatus, setAddCreativeStatus] = useState('testing')
+  const [addPostUrl,    setAddPostUrl]    = useState('')
+  const [addCpm,        setAddCpm]        = useState('')
+  const [addNicheId,    setAddNicheId]    = useState('')
+  const [addLanguageId, setAddLanguageId] = useState('')
+  const [addTrafficId,  setAddTrafficId]  = useState('')
+  const [addViews,      setAddViews]      = useState('')
+  const [addLikes,      setAddLikes]      = useState('')
+  const [addComments,   setAddComments]   = useState('')
 
-  // Modal state
   const [editingCreative,  setEditingCreative]  = useState<OfferFile | null>(null)
   const [deletingCreative, setDeletingCreative] = useState<OfferFile | null>(null)
   const [deletingBusy,     setDeletingBusy]     = useState(false)
 
-  // Folders
   const [files,         setFiles]         = useState<OfferFile[]>([])
   const [folders,       setFolders]       = useState<FolderState[]>([])
   const [newFolderName, setNewFolderName] = useState('')
   const [linkForms,     setLinkForms]     = useState<Record<string, LinkForm>>({})
 
-  // Fetch on mount — reads can use anon client (public reads)
   useEffect(() => {
     if (!offerId) return
     Promise.all([
@@ -677,20 +799,19 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
       }
 
       const allFiles    = (filesRes.data ?? []) as OfferFile[]
-      const cFiles      = allFiles.filter((f) => f.folder_name === '__creatives__')
-      const folderFiles = allFiles.filter((f) => f.folder_name !== '__creatives__')
+      const cFiles      = allFiles.filter(f => f.folder_name === '__creatives__')
+      const folderFiles = allFiles.filter(f => f.folder_name !== '__creatives__')
 
       setCreatives(cFiles)
       setFiles(folderFiles)
 
-      const existingFolders = Array.from(new Set(folderFiles.map((f) => f.folder_name))).sort()
+      const existingFolders = Array.from(new Set(folderFiles.map(f => f.folder_name))).sort()
       const initNames = existingFolders.length > 0 ? existingFolders : DEFAULT_FOLDERS
-      setFolders(initNames.map((n) => ({ name: n, expanded: true, showAddLink: false, uploading: false })))
+      setFolders(initNames.map(n => ({ name: n, expanded: true, showAddLink: false, uploading: false })))
 
       setNiches((nichesRes.data ?? []) as LookupOption[])
       setLanguages((langsRes.data ?? []) as LookupOption[])
       setTrafficSources((trafficRes.data ?? []) as LookupOption[])
-
       setLoading(false)
     })
   }, [offerId]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -699,8 +820,6 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }
-
-  // ─── Creatives ────────────────────────────────────────────────────────────
 
   function openAddForm() {
     setAddNicheId(offerMeta.niche_id ?? '')
@@ -716,12 +835,15 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     setMediaTab('url')
     setMediaUrl('')
     setFileSize(null)
+    setAddCreativeStatus('testing')
     setAddPostUrl('')
     setAddCpm('')
-    setAddTargetMarket('')
     setAddNicheId(offerMeta.niche_id ?? '')
     setAddLanguageId(offerMeta.language_id ?? '')
     setAddTrafficId(offerMeta.traffic_source_id ?? '')
+    setAddViews('')
+    setAddLikes('')
+    setAddComments('')
     setShowAddForm(false)
   }
 
@@ -742,36 +864,34 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     if (!mediaUrl.trim()) { showToast('Add a media URL or upload a file first'); return }
     setSavingCreative(true)
     const fileName = `${creativeName.trim() || 'Creative'}${angle.trim() ? ` | ${angle.trim()}` : ''}`
-    const langName = languages.find(l => l.id === addTargetMarket)?.name ?? null
     const { data: inserted, error } = await apiInsertOfferFile({
-      offer_id:      offerId,
-      folder_name:   '__creatives__',
-      file_name:     fileName,
-      file_url:      mediaUrl.trim(),
-      file_type:     creativeType,
-      file_size:     fileSize,
-      post_url:      addPostUrl.trim() || null,
-      cpm_estimated: addCpm ? parseFloat(addCpm) : null,
-      target_market: langName,
-      scrape_status: addPostUrl.trim() ? 'active' : 'no_url',
+      offer_id:         offerId,
+      folder_name:      '__creatives__',
+      file_name:        fileName,
+      file_url:         mediaUrl.trim(),
+      file_type:        creativeType,
+      file_size:        fileSize,
+      post_url:         addPostUrl.trim() || null,
+      cpm_estimated:    addCpm      ? parseFloat(addCpm)      : null,
+      scrape_status:    addPostUrl.trim() ? 'active' : 'no_url',
+      creative_status:  addCreativeStatus,
+      initial_views:    addViews    ? parseInt(addViews)    : null,
+      initial_likes:    addLikes    ? parseInt(addLikes)    : null,
+      initial_comments: addComments ? parseInt(addComments) : null,
     })
     setSavingCreative(false)
     if (error) { showToast(`Error: ${error}`); return }
     if (inserted) {
-      setCreatives((prev) => [inserted, ...prev])
+      setCreatives(prev => [inserted, ...prev])
       resetCreativeForm()
       showToast('Creative saved')
-      // Open edit modal so admin can attach files immediately
       setEditingCreative(inserted)
     }
   }
 
   async function updateCreative(id: string, updates: Record<string, unknown>) {
-    const { data, error } = await apiUpdateOfferFile(id, updates)
-    if (!error && data) {
-      setCreatives(prev => prev.map(c => c.id === id ? data : c))
-    }
-    return { error }
+    setCreatives(prev => prev.map(c => c.id === id ? { ...c, ...updates } as OfferFile : c))
+    return { error: null }
   }
 
   async function confirmDeleteCreative() {
@@ -785,39 +905,34 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     showToast('Creative deleted')
   }
 
-  // ─── Folders ──────────────────────────────────────────────────────────────
-
-  function getFolderFiles(name: string) {
-    return files.filter((f) => f.folder_name === name)
-  }
+  function getFolderFiles(name: string) { return files.filter(f => f.folder_name === name) }
 
   function toggleFolder(name: string) {
-    setFolders((prev) => prev.map((f) => f.name === name ? { ...f, expanded: !f.expanded } : f))
+    setFolders(prev => prev.map(f => f.name === name ? { ...f, expanded: !f.expanded } : f))
   }
 
   function toggleAddLink(name: string) {
-    setFolders((prev) => prev.map((f) => f.name === name ? { ...f, showAddLink: !f.showAddLink } : f))
-    if (!linkForms[name]) setLinkForms((prev) => ({ ...prev, [name]: { name: '', url: '' } }))
+    setFolders(prev => prev.map(f => f.name === name ? { ...f, showAddLink: !f.showAddLink } : f))
+    if (!linkForms[name]) setLinkForms(prev => ({ ...prev, [name]: { name: '', url: '' } }))
   }
 
   function setUploading(name: string, val: boolean) {
-    setFolders((prev) => prev.map((f) => f.name === name ? { ...f, uploading: val } : f))
+    setFolders(prev => prev.map(f => f.name === name ? { ...f, uploading: val } : f))
   }
 
   function createFolder() {
     const name = newFolderName.trim()
-    if (!name || folders.find((f) => f.name === name)) return
-    setFolders((prev) => [...prev, { name, expanded: true, showAddLink: false, uploading: false }])
+    if (!name || folders.find(f => f.name === name)) return
+    setFolders(prev => [...prev, { name, expanded: true, showAddLink: false, uploading: false }])
     setNewFolderName('')
   }
 
   async function deleteFolder(folderName: string) {
     if (!confirm(`Delete folder "${folderName}" and all its files?`)) return
-    // Use API for each file to bypass RLS
     const toDelete = files.filter(f => f.folder_name === folderName)
     await Promise.all(toDelete.map(f => apiDeleteOfferFile(f.id)))
-    setFiles((prev) => prev.filter((f) => f.folder_name !== folderName))
-    setFolders((prev) => prev.filter((f) => f.name !== folderName))
+    setFiles(prev => prev.filter(f => f.folder_name !== folderName))
+    setFolders(prev => prev.filter(f => f.name !== folderName))
   }
 
   async function handleFileUpload(folderName: string, fileList: FileList) {
@@ -832,7 +947,7 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
           file_url: publicUrl, file_type: ext, file_size: file.size,
         })
         if (error) { showToast(`Error: ${error}`); continue }
-        if (inserted) setFiles((prev) => [...prev, inserted])
+        if (inserted) setFiles(prev => [...prev, inserted])
       } catch (err) {
         showToast(err instanceof Error ? err.message : 'Upload failed')
       }
@@ -851,16 +966,16 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     })
     if (error) { showToast(`Error: ${error}`); return }
     if (inserted) {
-      setFiles((prev) => [...prev, inserted])
-      setLinkForms((prev) => ({ ...prev, [folderName]: { name: '', url: '' } }))
-      setFolders((prev) => prev.map((f) => f.name === folderName ? { ...f, showAddLink: false } : f))
+      setFiles(prev => [...prev, inserted])
+      setLinkForms(prev => ({ ...prev, [folderName]: { name: '', url: '' } }))
+      setFolders(prev => prev.map(f => f.name === folderName ? { ...f, showAddLink: false } : f))
       showToast('Link saved')
     }
   }
 
   async function deleteFile(fileId: string) {
     await apiDeleteOfferFile(fileId)
-    setFiles((prev) => prev.filter((f) => f.id !== fileId))
+    setFiles(prev => prev.filter(f => f.id !== fileId))
   }
 
   if (loading) {
@@ -876,7 +991,6 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
     <>
       {toast && <Toast msg={toast} onDismiss={() => setToast(null)} />}
 
-      {/* Edit creative modal */}
       {editingCreative && (
         <EditCreativeModal
           creative={editingCreative}
@@ -885,12 +999,11 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
           trafficSources={trafficSources}
           offerMeta={offerMeta}
           onSave={updateCreative}
-          onDelete={(c) => { setDeletingCreative(c) }}
+          onDelete={c => setDeletingCreative(c)}
           onClose={() => setEditingCreative(null)}
         />
       )}
 
-      {/* Delete confirm modal */}
       {deletingCreative && (
         <DeleteConfirmModal
           name={deletingCreative.file_name.split(' | ')[0]}
@@ -901,7 +1014,6 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
       )}
 
       <div className="p-8">
-        {/* Header */}
         <Link href="/admin/offers" className="inline-flex items-center text-sm text-zinc-500 hover:text-zinc-300 transition-colors mb-5">
           ← Back to Offers
         </Link>
@@ -923,12 +1035,11 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
             </div>
           </div>
 
-          {/* ─── SECTION 1: Creatives ─── */}
+          {/* ─── Creatives ─── */}
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5 mb-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-base font-semibold text-white">🎬 Creatives</h2>
-              <button
-                onClick={openAddForm}
+              <button onClick={openAddForm}
                 className="bg-yellow-400 text-black text-sm font-semibold px-4 py-2 rounded-lg cursor-pointer hover:brightness-110 transition-all"
               >＋ Add Creative</button>
             </div>
@@ -936,35 +1047,36 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
             {/* Add creative form */}
             {showAddForm && (
               <div className="bg-[#111111] border border-[#1C1C1C] rounded-xl p-4 mb-4 space-y-3">
-                <input type="text" value={creativeName} onChange={(e) => setCreativeName(e.target.value)}
+
+                <input type="text" value={creativeName} onChange={e => setCreativeName(e.target.value)}
                   placeholder="Ex: Creative 01 – Doctor Hook" className={inputCls} />
 
                 <div className="grid grid-cols-2 gap-3">
-                  <select value={creativeType} onChange={(e) => setCreativeType(e.target.value)}
-                    className={`${inputCls} cursor-pointer`}>
+                  <select value={creativeType} onChange={e => setCreativeType(e.target.value)} className={`${inputCls} cursor-pointer`}>
                     <option value="video">Video</option>
                     <option value="image">Image</option>
                     <option value="gif">GIF</option>
                   </select>
-                  <input type="text" value={angle} onChange={(e) => setAngle(e.target.value)}
+                  <input type="text" value={angle} onChange={e => setAngle(e.target.value)}
                     placeholder="Angle / Hook (ex: Doctor authority...)" className={inputCls} />
                 </div>
 
+                {/* Media */}
                 <div className="flex gap-1">
-                  {(['url', 'upload'] as const).map((tab) => (
+                  {(['url', 'upload'] as const).map(tab => (
                     <button key={tab} onClick={() => setMediaTab(tab)}
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${mediaTab === tab ? 'bg-yellow-400 text-black' : 'text-zinc-400 hover:text-white'}`}
                     >{tab === 'url' ? 'URL' : 'Upload'}</button>
                   ))}
                 </div>
                 {mediaTab === 'url' ? (
-                  <input type="url" value={mediaUrl} onChange={(e) => setMediaUrl(e.target.value)}
+                  <input type="url" value={mediaUrl} onChange={e => setMediaUrl(e.target.value)}
                     placeholder="YouTube, Vimeo or direct video/image URL" className={inputCls} />
                 ) : (
                   <div>
                     <input ref={creativeInputRef} type="file" accept=".mp4,.mov,.jpg,.jpeg,.png,.webp,.gif"
                       className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleCreativeUpload(f) }}
+                      onChange={e => { const f = e.target.files?.[0]; if (f) handleCreativeUpload(f) }}
                     />
                     <div onClick={() => creativeInputRef.current?.click()}
                       className="border-2 border-dashed border-zinc-700 rounded-xl p-6 text-center cursor-pointer hover:border-yellow-400/50 transition-colors"
@@ -983,42 +1095,84 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                   </div>
                 )}
 
+                {/* Native Post URL */}
                 <div>
-                  <input type="url" value={addPostUrl} onChange={(e) => setAddPostUrl(e.target.value)}
+                  <input type="url" value={addPostUrl} onChange={e => setAddPostUrl(e.target.value)}
                     placeholder="Native Post URL — https://facebook.com/watch/?v=..." className={inputCls} />
                   <p className="text-[10px] text-zinc-600 mt-1 px-1">Used for automatic scraping of views, likes and comments</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">$</span>
-                    <input type="number" step="0.01" min="0" value={addCpm} onChange={(e) => setAddCpm(e.target.value)}
-                      placeholder="CPM — e.g. 8 for LATAM, 25 for USA" className={`${inputCls} pl-7`} />
-                  </div>
-                  <select value={addTargetMarket} onChange={(e) => setAddTargetMarket(e.target.value)}
-                    className={`${inputCls} cursor-pointer`}>
-                    <option value="">Target Market…</option>
-                    {languages.map(l => (
-                      <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
-                    ))}
-                  </select>
+                {/* CPM */}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm pointer-events-none">$</span>
+                  <input type="number" step="0.01" min="0" value={addCpm} onChange={e => setAddCpm(e.target.value)}
+                    placeholder="CPM — e.g. 8 for LATAM, 25 for USA" className={`${inputCls} pl-7`} />
                 </div>
 
+                {/* Creative Status */}
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-2">Creative Status</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {CREATIVE_STATUS_OPTIONS.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setAddCreativeStatus(opt.value)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-colors ${
+                          addCreativeStatus === opt.value
+                            ? opt.sel
+                            : 'bg-transparent text-zinc-600 border-zinc-800 hover:border-zinc-600 hover:text-zinc-400'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Initial Snapshot ── */}
+                <div className="border-t border-[#1A1A1A] pt-3">
+                  <p className={sectionHeaderCls}>📊 Initial Snapshot (manual)</p>
+                  <p className="text-[10px] text-zinc-600 mb-3">Fill in from the ad screenshot — scraping will update later</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Views</label>
+                      <input type="number" min="0" value={addViews} onChange={e => setAddViews(e.target.value)}
+                        placeholder="0" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Likes</label>
+                      <input type="number" min="0" value={addLikes} onChange={e => setAddLikes(e.target.value)}
+                        placeholder="0" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-widest text-zinc-500 block mb-1">Comments</label>
+                      <input type="number" min="0" value={addComments} onChange={e => setAddComments(e.target.value)}
+                        placeholder="0" className={inputCls} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Creative Variants (locked until saved) ── */}
+                <div className="border-t border-[#1A1A1A] pt-3">
+                  <p className={sectionHeaderCls}>🎨 Creative Variants</p>
+                  <div className="border border-dashed border-zinc-800 rounded-lg p-4 text-center">
+                    <p className="text-xs text-zinc-600">Save the creative first, then add variants here</p>
+                  </div>
+                </div>
+
+                {/* Niche / Language / Traffic */}
                 <div className="grid grid-cols-3 gap-3">
-                  <select value={addNicheId} onChange={e => setAddNicheId(e.target.value)}
-                    className={`${inputCls} cursor-pointer`}>
+                  <select value={addNicheId} onChange={e => setAddNicheId(e.target.value)} className={`${inputCls} cursor-pointer`}>
                     <option value="">Niche…</option>
                     {niches.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
                   </select>
-                  <select value={addLanguageId} onChange={e => setAddLanguageId(e.target.value)}
-                    className={`${inputCls} cursor-pointer`}>
+                  <select value={addLanguageId} onChange={e => setAddLanguageId(e.target.value)} className={`${inputCls} cursor-pointer`}>
                     <option value="">Language…</option>
                     {languages.map(l => (
                       <option key={l.id} value={l.id}>{l.flag_emoji ? `${l.flag_emoji} ` : ''}{l.name}</option>
                     ))}
                   </select>
-                  <select value={addTrafficId} onChange={e => setAddTrafficId(e.target.value)}
-                    className={`${inputCls} cursor-pointer`}>
+                  <select value={addTrafficId} onChange={e => setAddTrafficId(e.target.value)} className={`${inputCls} cursor-pointer`}>
                     <option value="">Traffic…</option>
                     {trafficSources.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
@@ -1042,23 +1196,18 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {creatives.map((c) => (
-                  <CreativeCard
-                    key={c.id}
-                    creative={c}
-                    onEdit={setEditingCreative}
-                    onDelete={setDeletingCreative}
-                  />
+                {creatives.map(c => (
+                  <CreativeCard key={c.id} creative={c} onEdit={setEditingCreative} onDelete={setDeletingCreative} />
                 ))}
               </div>
             )}
           </div>
 
-          {/* ─── SECTION 2: Create Folder ─── */}
+          {/* ─── Create Folder ─── */}
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5 mb-4">
             <div className="flex gap-3">
-              <input type="text" value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') createFolder() }}
+              <input type="text" value={newFolderName} onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') createFolder() }}
                 placeholder="Folder name (ex: Ads, VSL, Checkout…)"
                 className="bg-[#111] border border-[#1C1C1C] text-white h-11 rounded-lg px-4 text-sm flex-1 focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 placeholder:text-zinc-600 transition-colors"
               />
@@ -1068,13 +1217,13 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
             </div>
           </div>
 
-          {/* ─── SECTION 3: Folders ─── */}
+          {/* ─── Folders ─── */}
           {folders.length === 0 ? (
             <div className="border border-zinc-800 border-dashed rounded-xl p-8 text-center">
               <p className="text-sm text-zinc-600">No folders yet — create one above</p>
             </div>
           ) : (
-            folders.map((folder) => {
+            folders.map(folder => {
               const folderFiles = getFolderFiles(folder.name)
               const linkForm    = linkForms[folder.name] ?? { name: '', url: '' }
               return (
@@ -1089,11 +1238,11 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                         <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">{folderFiles.length}</span>
                       )}
                     </div>
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      <input ref={(el) => { fileInputRefs.current[folder.name] = el }}
+                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                      <input ref={el => { fileInputRefs.current[folder.name] = el }}
                         type="file" multiple accept=".mp4,.mov,.jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.txt"
                         className="hidden"
-                        onChange={(e) => { if (e.target.files?.length) handleFileUpload(folder.name, e.target.files); e.target.value = '' }}
+                        onChange={e => { if (e.target.files?.length) handleFileUpload(folder.name, e.target.files); e.target.value = '' }}
                       />
                       <button onClick={() => fileInputRefs.current[folder.name]?.click()}
                         className="border border-zinc-700 text-zinc-400 text-xs px-3 py-1.5 rounded-lg hover:border-yellow-400 hover:text-yellow-400 cursor-pointer transition-colors"
@@ -1113,12 +1262,12 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                         <div className="bg-[#111] border-t border-[#1A1A1A] p-4">
                           <div className="flex gap-3 mb-3">
                             <input type="text" value={linkForm.name}
-                              onChange={(e) => setLinkForms((prev) => ({ ...prev, [folder.name]: { ...linkForm, name: e.target.value } }))}
+                              onChange={e => setLinkForms(prev => ({ ...prev, [folder.name]: { ...linkForm, name: e.target.value } }))}
                               placeholder="Link name (ex: Main VSL…)"
                               className="bg-[#0D0D0D] border border-[#1C1C1C] text-white h-10 rounded-lg px-3 text-sm flex-[40] focus:outline-none focus:border-yellow-400/50 placeholder:text-zinc-600"
                             />
                             <input type="url" value={linkForm.url}
-                              onChange={(e) => setLinkForms((prev) => ({ ...prev, [folder.name]: { ...linkForm, url: e.target.value } }))}
+                              onChange={e => setLinkForms(prev => ({ ...prev, [folder.name]: { ...linkForm, url: e.target.value } }))}
                               placeholder="https://…"
                               className="bg-[#0D0D0D] border border-[#1C1C1C] text-white h-10 rounded-lg px-3 text-sm flex-[50] focus:outline-none focus:border-yellow-400/50 placeholder:text-zinc-600"
                             />
@@ -1146,7 +1295,7 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                           <p className="text-xs text-zinc-600">No files yet</p>
                         </div>
                       ) : (
-                        folderFiles.map((file) => (
+                        folderFiles.map(file => (
                           <div key={file.id} className="flex items-center gap-3 p-3 border-t border-[#1A1A1A] hover:bg-[#111111] transition-colors">
                             <span className="text-lg shrink-0">{getFileIcon(file.file_type, file.file_name)}</span>
                             <div className="flex-1 min-w-0">
