@@ -15,13 +15,10 @@ export async function POST(request: Request) {
   const { userId, full_name, role } = await request.json()
   if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 })
 
-  // Try update first; if 0 rows matched (no profile yet), upsert creates the row
   const { error } = await supabaseAdmin
     .from('profiles')
-    .upsert(
-      { id: userId, full_name: full_name ?? null, role: role ?? 'user' },
-      { onConflict: 'id' }
-    )
+    .update({ full_name: full_name ?? null, role: role ?? 'user' })
+    .eq('id', userId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
