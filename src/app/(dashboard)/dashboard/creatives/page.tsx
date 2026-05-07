@@ -385,8 +385,8 @@ export default function CreativesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">
-          {filtered.map((row, idx) => {
-            const locked = !isPro && idx > 0
+          {filtered.map((row) => {
+            const locked = !isPro
             return (
               <CreativeCard
                 key={row.id}
