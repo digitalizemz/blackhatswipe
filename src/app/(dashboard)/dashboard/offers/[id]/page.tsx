@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -256,7 +256,7 @@ function Toast({ message, type, onHide }: { message: string; type: 'success' | '
 
 export default function OfferDetailPage() {
   const { id }   = useParams<{ id: string }>()
-  const supabase    = createClient()
+  const supabase    = useMemo(() => createClient(), [])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [offer,      setOffer]      = useState<any>(null)
