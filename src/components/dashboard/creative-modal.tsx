@@ -125,7 +125,7 @@ export function CreativeModal({
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  const parts  = creative.file_name.split(' | ')
+  const parts  = (creative.file_name ?? '').split(' | ')
   const name   = parts[0] || 'Creative'
   const angle  = parts[1] || ''
   const status = creative.scrape_status ?? 'no_url'

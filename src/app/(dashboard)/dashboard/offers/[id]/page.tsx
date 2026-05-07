@@ -52,7 +52,7 @@ const CREATIVE_STATUS_CARD: Record<string, { cls: string; label: string }> = {
 }
 
 function CreativeCard({ creative, onClick }: { creative: OfferFile; onClick: () => void }) {
-  const parts   = creative.file_name.split(' | ')
+  const parts   = (creative.file_name ?? '').split(' | ')
   const name    = parts[0] || 'Creative'
   const ytId    = extractYouTubeId(creative.file_url)
   const isGif   = /\.gif$/i.test(creative.file_url)
@@ -259,9 +259,10 @@ export default function OfferDetailPage() {
   const supabase    = createClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [offer,     setOffer]     = useState<any>(null)
-  const [allFiles,  setAllFiles]  = useState<OfferFile[]>([])
-  const [loading,   setLoading]   = useState(true)
+  const [offer,      setOffer]      = useState<any>(null)
+  const [allFiles,   setAllFiles]   = useState<OfferFile[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const [selectedVslIndex,  setSelectedVslIndex]  = useState(0)
   const [selectedCreative,  setSelectedCreative]  = useState<OfferFile | null>(null)
@@ -307,12 +308,14 @@ export default function OfferDetailPage() {
     ]).then(([offerRes, filesRes]) => {
       if (offerRes.error) {
         console.error('[OfferDetail] offers fetch error:', offerRes.error.message, offerRes.error.code)
+        setFetchError(offerRes.error.message)
       }
       if (offerRes.data) setOffer(offerRes.data)
       setAllFiles((filesRes.data ?? []) as OfferFile[])
       setLoading(false)
     }).catch(err => {
       console.error('[OfferDetail] unexpected error:', err)
+      setFetchError(err?.message ?? 'Unexpected error loading offer')
       setLoading(false)
     })
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -350,7 +353,9 @@ export default function OfferDetailPage() {
   if (!offer) {
     return (
       <div className="p-8">
-        <p className="text-red-400 text-sm">Offer not found.</p>
+        <p className="text-red-400 text-sm font-medium">
+          {fetchError ? `Error loading offer: ${fetchError}` : 'Offer not found.'}
+        </p>
         <Link href="/dashboard/offers" className="text-zinc-400 hover:text-white text-sm mt-2 inline-block">
           ← Back to Offers
         </Link>
