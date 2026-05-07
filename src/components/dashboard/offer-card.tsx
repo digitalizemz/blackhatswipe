@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { SupabaseOffer } from '@/types/offer'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
@@ -53,8 +53,6 @@ interface OfferCardProps {
 }
 
 export default function OfferCard({ offer, winning = false, locked = false }: OfferCardProps) {
-  const router = useRouter()
-
   // Creative stats computed from the joined offer_files
   const creativeFiles  = (offer.offer_files ?? []).filter(f => f.folder_name === '__creatives__')
   const creativesCount = creativeFiles.length
@@ -77,14 +75,13 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
   const gradientCls  = deriveGradient(offer.id)
 
   return (
-    <div
+    <Link
+      href={`/dashboard/offers/${offer.id}`}
       className={cn(
         'bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl overflow-hidden cursor-pointer flex flex-col',
         'hover:border-yellow-400/20 hover:shadow-lg hover:shadow-yellow-400/5 transition-all duration-200',
         locked && 'opacity-80'
       )}
-      onClick={() => router.push(`/dashboard/offers/${offer.id}`)}
-      title={locked ? 'Click to view offer' : undefined}
     >
       {/* ── Cover Image ── */}
       <div className={cn('relative h-[200px] bg-gradient-to-br shrink-0 overflow-hidden', gradientCls)}>
@@ -196,6 +193,6 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
           )}
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
