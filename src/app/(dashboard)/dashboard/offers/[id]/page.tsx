@@ -5,7 +5,6 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
-import { useUserProfile } from '@/lib/user-profile-context'
 import UpgradeModal from '@/components/ui/upgrade-modal'
 import { VideoPlayer } from '@/components/shared/VideoPlayer'
 import {
@@ -258,7 +257,6 @@ function Toast({ message, type, onHide }: { message: string; type: 'success' | '
 export default function OfferDetailPage() {
   const { id }   = useParams<{ id: string }>()
   const supabase    = createClient()
-  const ctxProfile  = useUserProfile()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [offer,     setOffer]     = useState<any>(null)
@@ -272,11 +270,10 @@ export default function OfferDetailPage() {
   const [creativeFilters,   setCreativeFilters]   = useState<Set<string>>(new Set())
   const [creativeSort,      setCreativeSort]      = useState<'views' | 'recent' | 'name'>('recent')
 
-  // Resolved plan/role: context is set server-side, but fall back to a direct
-  // Supabase read so editors are never blocked if the layout's admin client fails.
-  const [resolvedPlan, setResolvedPlan] = useState(ctxProfile.plan)
-  const [resolvedRole, setResolvedRole] = useState(ctxProfile.role)
+  const [showUpgrade,  setShowUpgrade]  = useState(false)
 
+  // Fall back to a direct profile read so editors are never blocked
+  // if the layout's admin client fails and context defaults to {plan:'free'}.
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
       if (!authUser) return
@@ -286,18 +283,15 @@ export default function OfferDetailPage() {
         .eq('id', authUser.id)
         .single()
       if (data) {
-        setResolvedPlan(data.plan ?? 'free')
-        setResolvedRole(data.role ?? 'user')
+        const isPro =
+          data.plan === 'pro' ||
+          data.role === 'admin' ||
+          data.role === 'editor' ||
+          data.plan === 'admin'
+        if (!isPro) setShowUpgrade(true)
       }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const isPro = resolvedPlan === 'pro'
-             || resolvedRole === 'admin'
-             || resolvedRole === 'editor'
-             || resolvedPlan === 'admin' // legacy
-
-  const [showUpgrade,  setShowUpgrade]  = useState(false)
   const [showReport,   setShowReport]   = useState(false)
 
   useEffect(() => {
@@ -355,36 +349,6 @@ export default function OfferDetailPage() {
         <Link href="/dashboard/offers" className="text-zinc-400 hover:text-white text-sm mt-2 inline-block">
           ← Back to Offers
         </Link>
-      </div>
-    )
-  }
-
-  // ── Pro gate ────────────────────────────────────────────────────────────────
-  if (!isPro) {
-    return (
-      <div className="p-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
-        <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-3xl mb-5">
-          🔒
-        </div>
-        <h2 className="text-xl font-bold text-white mb-2">Pro Access Required</h2>
-        <p className="text-sm text-zinc-400 mb-6 max-w-xs">
-          Upgrade to Pro to view offer details, creatives, VSLs and full data.
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowUpgrade(true)}
-            className="px-6 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-lg text-sm transition-all cursor-pointer"
-          >
-            Upgrade to Pro →
-          </button>
-          <Link
-            href="/dashboard/offers"
-            className="px-6 py-2.5 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-sm transition-all"
-          >
-            ← Back
-          </Link>
-        </div>
-        {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
       </div>
     )
   }
@@ -789,6 +753,8 @@ export default function OfferDetailPage() {
           }}
         />
       )}
+
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </div>
   )
 }

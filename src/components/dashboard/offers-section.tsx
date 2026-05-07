@@ -221,7 +221,6 @@ export default function OffersSection({
               offer={offer}
               winning={winningOnly}
               locked={!isPro}
-              onLockedClick={() => setShowUpgrade(true)}
             />
           ))}
         </div>

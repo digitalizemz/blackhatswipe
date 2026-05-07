@@ -50,10 +50,9 @@ interface OfferCardProps {
   offer: SupabaseOffer
   winning?: boolean
   locked?: boolean
-  onLockedClick?: () => void
 }
 
-export default function OfferCard({ offer, winning = false, locked = false, onLockedClick }: OfferCardProps) {
+export default function OfferCard({ offer, winning = false, locked = false }: OfferCardProps) {
   const router = useRouter()
 
   // Creative stats computed from the joined offer_files
@@ -84,8 +83,8 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
         'hover:border-yellow-400/20 hover:shadow-lg hover:shadow-yellow-400/5 transition-all duration-200',
         locked && 'opacity-80'
       )}
-      onClick={() => locked ? onLockedClick?.() : router.push(`/dashboard/offers/${offer.id}`)}
-      title={locked ? 'Upgrade to unlock' : undefined}
+      onClick={() => router.push(`/dashboard/offers/${offer.id}`)}
+      title={locked ? 'Click to view offer' : undefined}
     >
       {/* ── Cover Image ── */}
       <div className={cn('relative h-[200px] bg-gradient-to-br shrink-0 overflow-hidden', gradientCls)}>
@@ -182,11 +181,8 @@ export default function OfferCard({ offer, winning = false, locked = false, onLo
         {/* ROW 3 — Footer */}
         <div className="flex justify-between items-center mt-auto">
           {locked ? (
-            <span
-              onClick={(e) => { e.stopPropagation(); onLockedClick?.() }}
-              className="text-xs text-yellow-400/70 hover:text-yellow-400 transition-colors cursor-pointer"
-            >
-              🔒 Upgrade to unlock
+            <span className="text-xs text-yellow-400/70">
+              🔒 Upgrade to Pro
             </span>
           ) : (
             <span className="text-xs text-zinc-600">
