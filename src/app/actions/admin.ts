@@ -111,6 +111,42 @@ export async function upsertOffer(data: AdminOffer): Promise<{ id?: string; erro
   }
 }
 
+export async function insertOfferAdmin(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  offerData: Record<string, any>,
+  saveSnapshot = false,
+  todayAds = 0,
+): Promise<{ id?: string; error?: string }> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('offers')
+    .insert([offerData])
+    .select('id')
+    .single()
+  if (error) return { error: error.message }
+  if (saveSnapshot && data?.id) {
+    await supabase.from('offer_ad_snapshots').upsert(
+      { offer_id: data.id, ad_count: todayAds, snapshot_date: new Date().toISOString().split('T')[0] },
+      { onConflict: 'offer_id,snapshot_date' },
+    )
+  }
+  revalidatePath('/admin/offers')
+  return { id: data.id }
+}
+
+export async function updateOfferAdmin(
+  id: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  offerData: Record<string, any>,
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('offers').update(offerData).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin/offers')
+  revalidatePath(`/admin/offers/${id}/edit`)
+  return {}
+}
+
 export async function deleteOffer(id: string): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 

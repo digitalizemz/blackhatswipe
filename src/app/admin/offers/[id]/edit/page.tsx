@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { updateOfferAdmin } from '@/app/actions/admin'
 import { ChevronDown } from 'lucide-react'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 
@@ -223,13 +224,12 @@ export default function EditOfferPage() {
     if (thumbnailUrl?.trim()) offerObject.thumbnail_url     = thumbnailUrl.trim()
     if (description?.trim())  offerObject.description       = description.trim()
 
-    const { error: updateErr } = await supabase
-      .from('offers').update(offerObject).eq('id', id).select().single()
+    const { error: updateErr } = await updateOfferAdmin(id, offerObject)
 
     setSaving(false)
 
     if (updateErr) {
-      setToast({ message: updateErr.message, type: 'error' })
+      setToast({ message: updateErr, type: 'error' })
       return
     }
 

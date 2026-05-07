@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { insertOfferAdmin } from '@/app/actions/admin'
 import { ChevronDown } from 'lucide-react'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 
@@ -202,26 +203,21 @@ export default function OfferWizard() {
     if (thumbnailUrl?.trim()) offerObject.thumbnail_url     = thumbnailUrl.trim()
     if (description?.trim())  offerObject.description       = description.trim()
 
-    const { data, error: insertErr } = await supabase
-      .from('offers').insert([offerObject]).select().single()
+    const { id: newId, error: insertErr } = await insertOfferAdmin(
+      offerObject,
+      saveSnapshot,
+      Number(todayAds) || 0,
+    )
 
     setSaving(false)
 
     if (insertErr) {
-      setToast({ message: insertErr.message, type: 'error' })
+      setToast({ message: insertErr, type: 'error' })
       return
     }
 
-    if (saveSnapshot) {
-      await supabase.from('offer_ad_snapshots').upsert({
-        offer_id:      data.id,
-        ad_count:      Number(todayAds) || 0,
-        snapshot_date: new Date().toISOString().split('T')[0],
-      }, { onConflict: 'offer_id,snapshot_date' })
-    }
-
     setToast({ message: 'Offer saved! Now add materials →', type: 'success' })
-    setTimeout(() => router.push(`/admin/offers/${data.id}/materials`), 1000)
+    setTimeout(() => router.push(`/admin/offers/${newId}/materials`), 1000)
   }
 
   return (
