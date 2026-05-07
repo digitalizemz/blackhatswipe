@@ -243,12 +243,9 @@ export async function inviteUser(data: {
   plan?: UserPlan
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
-  const isProd  = process.env.NODE_ENV === 'production'
-  const baseUrl = isProd
-    ? 'https://www.blackhatswipe.com'
-    : (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://www.blackhatswipe.com'
   const { data: invited, error } = await supabase.auth.admin.inviteUserByEmail(data.email, {
-    redirectTo: `${baseUrl}/set-password`,
+    redirectTo: `${siteUrl}/set-password`,
   })
   if (error) return { error: error.message }
   if (invited?.user?.id) {

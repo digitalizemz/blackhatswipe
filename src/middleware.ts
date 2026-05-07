@@ -36,6 +36,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
+  // Public routes — invite link lands here with no session cookie yet
+  if (pathname === '/set-password') {
+    return supabaseResponse
+  }
+
   if (pathname.startsWith('/admin')) {
     if (!user) {
       const url = request.nextUrl.clone()

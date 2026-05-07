@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
 export default function SetPasswordPage() {
@@ -13,13 +14,47 @@ export default function SetPasswordPage() {
   const [error,     setError]     = useState<string | null>(null)
   const [loading,   setLoading]   = useState(false)
   const [checking,  setChecking]  = useState(true)
+  const [expired,   setExpired]   = useState(false)
+
+  const resolvedRef = useRef(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        router.replace('/login')
-      } else {
+    function resolve(hasSession: boolean) {
+      if (resolvedRef.current) return
+      resolvedRef.current = true
+      if (hasSession) {
         setChecking(false)
+      } else {
+        setExpired(true)
+        setChecking(false)
+      }
+    }
+
+    // Check if a session already exists (e.g. user refreshed the page)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        resolve(true)
+        return
+      }
+
+      // No session yet — the invite token lives in the URL hash.
+      // Supabase JS processes the hash automatically and fires onAuthStateChange.
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (session) {
+          resolve(true)
+          subscription.unsubscribe()
+        }
+      })
+
+      // Fallback: if no session arrives within 3 s, the link is invalid/expired
+      const timeout = setTimeout(() => {
+        resolve(false)
+        subscription.unsubscribe()
+      }, 3000)
+
+      return () => {
+        subscription.unsubscribe()
+        clearTimeout(timeout)
       }
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -57,11 +92,37 @@ export default function SetPasswordPage() {
     )
   }
 
+  if (expired) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="w-full max-w-[420px]">
+          <p className="text-center text-xl font-bold text-yellow-400 tracking-tight mb-1">
+            ⚡ BLACKHAT SWIPE
+          </p>
+          <div className="flex justify-center mb-8">
+            <span className="block w-10 h-0.5 bg-yellow-400 rounded-full" />
+          </div>
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl p-8 shadow-2xl text-center">
+            <h1 className="text-xl font-bold text-white mb-3">Invalid or expired invite link</h1>
+            <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
+              This invite link has expired or has already been used. Ask your admin to send a new one.
+            </p>
+            <Link
+              href="/login"
+              className="inline-block bg-yellow-400 hover:bg-yellow-500 text-black font-bold py-2.5 px-6 rounded-lg text-sm transition-all"
+            >
+              Back to Login
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-black flex items-center justify-center px-4">
       <div className="w-full max-w-[420px]">
 
-        {/* Logo */}
         <p className="text-center text-xl font-bold text-yellow-400 tracking-tight mb-1">
           ⚡ BLACKHAT SWIPE
         </p>
@@ -69,7 +130,6 @@ export default function SetPasswordPage() {
           <span className="block w-10 h-0.5 bg-yellow-400 rounded-full" />
         </div>
 
-        {/* Card */}
         <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl p-8 shadow-2xl">
           <h1 className="text-2xl font-bold text-white mb-2">Create your password</h1>
           <p className="text-sm text-zinc-400 mb-7 leading-relaxed">
