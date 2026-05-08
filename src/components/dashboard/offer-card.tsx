@@ -1,9 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { SupabaseOffer } from '@/types/offer'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
+import UpgradeModal from '@/components/ui/upgrade-modal'
 
 // Fallback gradient when no thumbnail
 const gradientMap: Record<string, string> = {
@@ -53,6 +55,8 @@ interface OfferCardProps {
 }
 
 export default function OfferCard({ offer, winning = false, locked = false }: OfferCardProps) {
+  const [showUpgrade, setShowUpgrade] = useState(false)
+
   // Creative stats computed from the joined offer_files
   const creativeFiles  = (offer.offer_files ?? []).filter(f => f.folder_name === '__creatives__')
   const creativesCount = creativeFiles.length
@@ -74,15 +78,14 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
   const scalingBadge = SCALING_BADGE[offer.scaling_status ?? 'testing'] ?? SCALING_BADGE.testing
   const gradientCls  = deriveGradient(offer.id)
 
-  return (
-    <Link
-      href={`/dashboard/offers/${offer.id}`}
-      className={cn(
-        'bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl overflow-hidden cursor-pointer flex flex-col',
-        'hover:border-yellow-400/20 hover:shadow-lg hover:shadow-yellow-400/5 transition-all duration-200',
-        locked && 'opacity-80'
-      )}
-    >
+  const cardCls = cn(
+    'bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl overflow-hidden cursor-pointer flex flex-col',
+    'hover:border-yellow-400/20 hover:shadow-lg hover:shadow-yellow-400/5 transition-all duration-200',
+    locked && 'opacity-80'
+  )
+
+  const cardBody = (
+    <>
       {/* ── Cover Image ── */}
       <div className={cn('relative h-[200px] bg-gradient-to-br shrink-0 overflow-hidden', gradientCls)}>
         {offer.thumbnail_url && (
@@ -193,6 +196,21 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
           )}
         </div>
       </div>
-    </Link>
+    </>
+  )
+
+  return (
+    <>
+      {locked ? (
+        <div className={cardCls} onClick={() => setShowUpgrade(true)}>
+          {cardBody}
+        </div>
+      ) : (
+        <Link href={`/dashboard/offers/${offer.id}`} className={cardCls}>
+          {cardBody}
+        </Link>
+      )}
+      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
+    </>
   )
 }
