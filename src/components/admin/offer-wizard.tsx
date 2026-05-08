@@ -148,7 +148,13 @@ export default function OfferWizard() {
 
   async function handleThumbUpload(file: File) {
     setThumbUploading(true)
-    const path = `thumbnails/${Date.now()}-${file.name}`
+    const sanitizedName = file.name
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '-')
+      .replace(/-+/g, '-')
+      .toLowerCase()
+    const path = `thumbnails/${Date.now()}-${sanitizedName}`
     const { data, error: err } = await supabase.storage.from('thumbnails').upload(path, file, { upsert: true })
     if (!err && data) {
       const { data: { publicUrl } } = supabase.storage.from('thumbnails').getPublicUrl(data.path)
