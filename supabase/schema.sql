@@ -86,9 +86,17 @@ create table if not exists public.offers (
 alter table public.offers enable row level security;
 
 -- All authenticated users can read offers (shared library)
-create policy "Authenticated users can view offers"
-  on public.offers for select
-  using (auth.role() = 'authenticated');
+drop policy if exists "Authenticated users can view offers" on public.offers;
+create policy "Authenticated users can read offers"
+  on public.offers for select to authenticated
+  using (true);
+
+-- offer_files: authenticated users can read all rows
+alter table if exists public.offer_files enable row level security;
+drop policy if exists "Auth read offer_files" on public.offer_files;
+create policy "Auth read offer_files"
+  on public.offer_files for select to authenticated
+  using (true);
 
 -- ============================================================
 -- CREATIVES
