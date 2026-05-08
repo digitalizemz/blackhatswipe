@@ -91,12 +91,24 @@ create policy "Authenticated users can read offers"
   on public.offers for select to authenticated
   using (true);
 
+-- Service role full access to offers (belt-and-suspenders: covers cases where BYPASSRLS isn't honoured)
+drop policy if exists "service_role can manage offers" on public.offers;
+create policy "service_role can manage offers"
+  on public.offers for all to service_role
+  using (true) with check (true);
+
 -- offer_files: authenticated users can read all rows
 alter table if exists public.offer_files enable row level security;
 drop policy if exists "Auth read offer_files" on public.offer_files;
 create policy "Auth read offer_files"
   on public.offer_files for select to authenticated
   using (true);
+
+-- Service role full access to offer_files
+drop policy if exists "service_role can manage offer_files" on public.offer_files;
+create policy "service_role can manage offer_files"
+  on public.offer_files for all to service_role
+  using (true) with check (true);
 
 -- ============================================================
 -- CREATIVES
