@@ -297,28 +297,22 @@ export default function OfferDetailPage() {
 
   useEffect(() => {
     if (!id) return
-    Promise.all([
-      supabase
-        .from('offers')
-        .select('*, niches(name,color), languages(name,flag_emoji), traffic_sources(name), offer_types(name)')
-        .eq('id', id).single(),
-      supabase
-        .from('offer_files').select('*')
-        .eq('offer_id', id).order('created_at'),
-    ]).then(([offerRes, filesRes]) => {
-      if (offerRes.error) {
-        console.error('[OfferDetail] offers fetch error:', offerRes.error.message, offerRes.error.code)
-        setFetchError(offerRes.error.message)
-      }
-      if (offerRes.data) setOffer(offerRes.data)
-      setAllFiles((filesRes.data ?? []) as OfferFile[])
-      setLoading(false)
-    }).catch(err => {
-      console.error('[OfferDetail] unexpected error:', err)
-      setFetchError(err?.message ?? 'Unexpected error loading offer')
-      setLoading(false)
-    })
-  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+    fetch(`/api/offers/${id}`)
+      .then(res => res.json())
+      .then(json => {
+        if (json.error) {
+          setFetchError(json.error)
+        } else {
+          setOffer(json.offer)
+          setAllFiles((json.files ?? []) as OfferFile[])
+        }
+        setLoading(false)
+      })
+      .catch(err => {
+        setFetchError(err?.message ?? 'Unexpected error')
+        setLoading(false)
+      })
+  }, [id])
 
   async function handleSaveSwipe() {
     const { data: { user } } = await supabase.auth.getUser()
