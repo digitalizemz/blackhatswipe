@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -256,7 +256,7 @@ function Toast({ message, type, onHide }: { message: string; type: 'success' | '
 
 export default function OfferDetailPage() {
   const { id }   = useParams<{ id: string }>()
-  const supabase    = useMemo(() => createClient(), [])
+  const supabase = createClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [offer,      setOffer]      = useState<any>(null)
@@ -271,28 +271,44 @@ export default function OfferDetailPage() {
   const [creativeFilters,   setCreativeFilters]   = useState<Set<string>>(new Set())
   const [creativeSort,      setCreativeSort]      = useState<'views' | 'recent' | 'name'>('recent')
 
-  const [showUpgrade,  setShowUpgrade]  = useState(false)
+  const [showUpgrade,   setShowUpgrade]   = useState(false)
+  const [accessChecked, setAccessChecked] = useState(false)
 
-  // Fall back to a direct profile read so editors are never blocked
-  // if the layout's admin client fails and context defaults to {plan:'free'}.
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data: { user: authUser } }) => {
-      if (!authUser) return
-      const { data } = await supabase
+    const checkAccess = async () => {
+      const supabaseClient = createClient()
+      const { data: { user: authUser } } = await supabaseClient.auth.getUser()
+
+      if (!authUser) {
+        setShowUpgrade(true)
+        setAccessChecked(true)
+        return
+      }
+
+      const { data, error } = await supabaseClient
         .from('profiles')
         .select('plan, role')
         .eq('id', authUser.id)
         .single()
-      if (data) {
-        const isPro =
-          data.plan === 'pro' ||
-          data.role === 'admin' ||
-          data.role === 'editor' ||
-          data.plan === 'admin'
-        if (!isPro) setShowUpgrade(true)
+
+      if (error || !data) {
+        setShowUpgrade(false)
+        setAccessChecked(true)
+        return
       }
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+      const isPro =
+        data.plan === 'pro' ||
+        data.role === 'admin' ||
+        data.role === 'editor' ||
+        data.plan === 'admin'
+
+      setShowUpgrade(!isPro)
+      setAccessChecked(true)
+    }
+
+    checkAccess()
+  }, [])
   const [showReport,   setShowReport]   = useState(false)
 
   useEffect(() => {
@@ -335,7 +351,7 @@ export default function OfferDetailPage() {
   }
 
   // ── Loading / not found ─────────────────────────────────────────────────────
-  if (loading) {
+  if (loading || !accessChecked) {
     return (
       <div className="p-8 flex items-center gap-2 text-zinc-500 text-sm">
         <div className="w-4 h-4 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin" />
@@ -758,7 +774,7 @@ export default function OfferDetailPage() {
         />
       )}
 
-      {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
+      {accessChecked && showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </div>
   )
 }
