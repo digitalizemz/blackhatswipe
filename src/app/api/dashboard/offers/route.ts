@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
   const typeId      = searchParams.get('type') ?? ''
   const search      = searchParams.get('search') ?? ''
   const sort        = searchParams.get('sort') ?? 'Latest'
+  const page        = parseInt(searchParams.get('page') ?? '0')
 
   // Free users get basic card fields only — no offer_files join, no sensitive metrics
   const freeCols = 'id, title, niche_id, status, is_winning, scaling_status, thumbnail_url, created_at, niches(name, color)'
@@ -53,7 +54,13 @@ export async function GET(req: NextRequest) {
     query = query.order('created_at', { ascending: false })
   }
 
-  if (isFree) query = query.limit(3)
+  if (isFree) {
+    query = query.limit(3)
+  } else if (page > 0) {
+    query = query.range(page * 50, page * 50 + 49)
+  } else {
+    query = query.limit(50)
+  }
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

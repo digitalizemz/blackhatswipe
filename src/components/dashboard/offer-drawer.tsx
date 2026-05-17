@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { SupabaseOffer } from '@/types/offer'
@@ -94,10 +95,11 @@ export default function OfferDrawer({ offer, winning = false, onClose }: OfferDr
         {/* ── Thumbnail ── */}
         <div className={cn('h-48 bg-gradient-to-br relative shrink-0', gradient)}>
           {offer.thumbnail_url && (
-            <img
+            <Image
               src={offer.thumbnail_url}
               alt={offer.title}
-              className="absolute inset-0 w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           )}
           <button

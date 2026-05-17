@@ -155,15 +155,23 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
 export default function SupportPage() {
   const [tickets,    setTickets]    = useState<Ticket[]>([])
   const [loading,    setLoading]    = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [showModal,  setShowModal]  = useState(false)
   const [successMsg, setSuccessMsg] = useState('')
   const successTimer = useRef<ReturnType<typeof setTimeout>>()
 
   async function loadTickets() {
-    const res  = await fetch('/api/support/tickets')
-    const body = await res.json()
-    setTickets(body.tickets ?? [])
-    setLoading(false)
+    setFetchError(null)
+    try {
+      const res = await fetch('/api/support/tickets')
+      if (!res.ok) throw new Error('Failed to load tickets')
+      const body = await res.json()
+      setTickets(body.tickets ?? [])
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { loadTickets() }, [])
@@ -175,6 +183,13 @@ export default function SupportPage() {
     setSuccessMsg(`Ticket opened. We'll respond shortly.`)
     successTimer.current = setTimeout(() => setSuccessMsg(''), 4000)
   }
+
+  if (fetchError) return (
+    <div className="p-8 text-center">
+      <p className="text-red-500 mb-4">{fetchError}</p>
+      <button onClick={loadTickets} className="text-zinc-400 hover:text-white underline text-sm cursor-pointer">Try again</button>
+    </div>
+  )
 
   return (
     <div className="p-8 max-w-3xl">

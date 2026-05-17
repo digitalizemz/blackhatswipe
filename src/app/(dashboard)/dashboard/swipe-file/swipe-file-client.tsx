@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { deleteSwipeItem } from '@/app/actions/swipe'
@@ -55,10 +56,11 @@ export default function SwipeFileClient({ items }: { items: SwipeItemRow[] }) {
             {/* Thumbnail */}
             <div className={`relative h-52 bg-gradient-to-br ${gradientFor(item.niche ?? item.title)} shrink-0`}>
               {item.thumbnail_url && (
-                <img
+                <Image
                   src={item.thumbnail_url}
                   alt={item.title}
-                  className="absolute inset-0 w-full h-full object-cover"
+                  fill
+                  className="object-cover"
                 />
               )}
               {!item.thumbnail_url && (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
@@ -57,7 +58,7 @@ function CreativeThumbs({ files }: { files: OfferFile[] }) {
               style={{ marginLeft: i > 0 ? '-8px' : 0, zIndex: 3 - i, position: 'relative' }}
             >
               {isImg
-                ? <img src={f.file_url} alt="" className="w-full h-full object-cover" />
+                ? <Image src={f.file_url} alt="" fill className="object-cover" />
                 : <div className="w-full h-full flex items-center justify-center text-[10px]">🎬</div>
               }
             </div>
@@ -206,9 +207,9 @@ export default function AdminOffersPage() {
                     {/* OFFER */}
                     <td className="px-5 py-5">
                       <div className="flex items-center gap-3">
-                        <div className="w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-zinc-800">
+                        <div className="relative w-14 h-14 rounded-lg overflow-hidden shrink-0 bg-zinc-800">
                           {offer.thumbnail_url
-                            ? <img src={offer.thumbnail_url} alt={offer.title} className="w-full h-full object-cover" />
+                            ? <Image src={offer.thumbnail_url} alt={offer.title} fill className="object-cover" />
                             : <div className="w-full h-full bg-gradient-to-br from-zinc-700 to-zinc-800" />
                           }
                         </div>

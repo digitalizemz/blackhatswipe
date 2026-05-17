@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -87,7 +88,7 @@ function CreativeCard({ creative, onClick }: { creative: OfferFile; onClick: () 
         {/* Media */}
         {ytId ? (
           <>
-            <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+            <Image src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} fill className="object-cover" />
             <div className="absolute inset-0 flex items-center justify-center bg-black/40 group-hover:bg-black/30 transition-colors">
               <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
                 <span className="text-base ml-0.5">▶</span>
@@ -95,7 +96,7 @@ function CreativeCard({ creative, onClick }: { creative: OfferFile; onClick: () 
             </div>
           </>
         ) : isImage || isGif ? (
-          <img src={creative.file_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+          <Image src={creative.file_url} alt={name} fill className="object-cover" />
         ) : isVideo ? (
           <>
             <video src={creative.file_url} muted preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
@@ -429,7 +430,7 @@ export default function OfferDetailPage() {
           {/* Offer info */}
           <div>
             {vsls.length === 0 && offer.thumbnail_url && (
-              <img src={offer.thumbnail_url} alt={offer.title} className="w-full rounded-xl max-h-64 object-cover mb-4" />
+              <Image src={offer.thumbnail_url} alt={offer.title} width={800} height={256} className="w-full rounded-xl max-h-64 object-cover mb-4" />
             )}
             <h2 className="text-2xl font-bold text-white leading-tight">{offer.title}</h2>
             <div className="flex items-center gap-2 mt-3 flex-wrap">

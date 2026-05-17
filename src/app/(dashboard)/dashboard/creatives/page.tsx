@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Image from 'next/image'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 import { CreativeModal, OfferFile, extractYouTubeId, CREATIVE_STATUS_BADGE } from '@/components/dashboard/creative-modal'
 import { useUserProfile, userIsPro, useUpgradeModal } from '@/lib/user-profile-context'
@@ -63,7 +64,7 @@ function CreativeCard({ row, locked = false, onLockedClick, onClick }: {
   const langName     = offer?.languages?.name ?? null
   const trafficName  = offer?.traffic_sources?.name ?? null
 
-  const mediaCls = locked ? 'absolute inset-0 w-full h-full object-cover blur-sm scale-105' : 'absolute inset-0 w-full h-full object-cover'
+  const imgCls = locked ? 'object-cover blur-sm scale-105' : 'object-cover'
 
   return (
     <div
@@ -81,11 +82,11 @@ function CreativeCard({ row, locked = false, onLockedClick, onClick }: {
           </div>
         )}
         {ytId ? (
-          <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className={mediaCls} />
+          <Image src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} fill className={imgCls} />
         ) : isImage ? (
-          <img src={row.file_url} alt={name} className={mediaCls} />
+          <Image src={row.file_url} alt={name} fill className={imgCls} />
         ) : isVideo ? (
-          <video src={row.file_url} muted preload="metadata" className={mediaCls} />
+          <video src={row.file_url} muted preload="metadata" className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="text-4xl opacity-40">🎬</span>
@@ -188,8 +189,11 @@ export default function CreativesPage() {
   const isPro        = userIsPro(profile)
   const upgradeModal = useUpgradeModal()
 
-  const [rows,    setRows]    = useState<CreativeRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [rows,        setRows]        = useState<CreativeRow[]>([])
+  const [loading,     setLoading]     = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page,        setPage]        = useState(1)
+  const [hasMore,     setHasMore]     = useState(false)
   const [selected, setSelected] = useState<CreativeRow | null>(null)
 
   // Filters
@@ -205,11 +209,25 @@ export default function CreativesPage() {
     fetch('/api/dashboard/creatives')
       .then(res => res.json())
       .then(json => {
-        setRows((json.creatives ?? []) as unknown as CreativeRow[])
+        const newRows = (json.creatives ?? []) as unknown as CreativeRow[]
+        setRows(newRows)
+        setHasMore(!json.isFree && newRows.length === 50)
+        setPage(1)
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [])
+
+  async function loadMore() {
+    setLoadingMore(true)
+    const res  = await fetch(`/api/dashboard/creatives?page=${page}`)
+    const json = await res.json()
+    const newRows = (json.creatives ?? []) as unknown as CreativeRow[]
+    setRows(prev => [...prev, ...newRows])
+    setPage(prev => prev + 1)
+    setHasMore(newRows.length === 50)
+    setLoadingMore(false)
+  }
 
   // Derive unique filter options from loaded data
   const niches   = useMemo(() => Array.from(new Set(rows.map(r => r.offers?.niches?.name).filter(Boolean))).sort() as string[], [rows])
@@ -371,20 +389,34 @@ export default function CreativesPage() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
-          {filtered.map((row) => {
-            const locked = !isPro
-            return (
-              <CreativeCard
-                key={row.id}
-                row={row}
-                locked={locked}
-                onLockedClick={upgradeModal.show}
-                onClick={() => setSelected(row)}
-              />
-            )
-          })}
-        </div>
+        <>
+          <div className="grid grid-cols-3 gap-4">
+            {filtered.map((row) => {
+              const locked = !isPro
+              return (
+                <CreativeCard
+                  key={row.id}
+                  row={row}
+                  locked={locked}
+                  onLockedClick={upgradeModal.show}
+                  onClick={() => setSelected(row)}
+                />
+              )
+            })}
+          </div>
+
+          {hasMore && (
+            <div className="text-center mt-8">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-6 py-2.5 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 rounded-lg text-sm cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading…' : 'Load More'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal */}

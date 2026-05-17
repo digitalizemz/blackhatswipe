@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import Image from 'next/image'
 
 interface VideoPlayerProps {
   src: string
@@ -33,10 +34,11 @@ export function VideoPlayer({ src, poster, className = '' }: VideoPlayerProps) {
           onClick={handleOverlayClick}
         >
           {poster && (
-            <img
+            <Image
               src={poster}
               alt=""
-              className="absolute inset-0 w-full h-full object-cover"
+              fill
+              className="object-cover"
             />
           )}
           <div className="relative z-10 w-[60px] h-[60px] rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -440,7 +441,7 @@ export default function EditOfferPage() {
             {thumbTab === 'url' ? (
               <div>
                 <input type="url" value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.target.value)} placeholder="https://…" className={inputCls} />
-                {thumbnailUrl && <img src={thumbnailUrl} alt="Preview" className="mt-3 w-full max-h-48 object-cover rounded-lg" />}
+                {thumbnailUrl && <Image src={thumbnailUrl} alt="Preview" width={800} height={192} className="mt-3 w-full max-h-48 object-cover rounded-lg" unoptimized />}
               </div>
             ) : (
               <div>
@@ -457,7 +458,7 @@ export default function EditOfferPage() {
                     </>
                   )}
                 </div>
-                {thumbnailUrl && !thumbUploading && <img src={thumbnailUrl} alt="Preview" className="mt-3 w-full max-h-48 object-cover rounded-lg" />}
+                {thumbnailUrl && !thumbUploading && <Image src={thumbnailUrl} alt="Preview" width={800} height={192} className="mt-3 w-full max-h-48 object-cover rounded-lg" unoptimized />}
               </div>
             )}
           </div>

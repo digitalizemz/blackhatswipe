@@ -32,9 +32,12 @@ export default function OffersSection({
   const profile  = useUserProfile()
   const isPro    = userIsPro(profile)
 
-  const [offers, setOffers]       = useState<SupabaseOffer[]>([])
-  const [isFree, setIsFree]       = useState(!isPro)
-  const [loading, setLoading]     = useState(true)
+  const [offers, setOffers]           = useState<SupabaseOffer[]>([])
+  const [isFree, setIsFree]           = useState(!isPro)
+  const [loading, setLoading]         = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage]               = useState(1)
+  const [hasMore, setHasMore]         = useState(false)
   const [showUpgrade, setShowUpgrade] = useState(false)
 
   const [niches, setNiches]               = useState<FilterOption[]>([])
@@ -67,10 +70,7 @@ export default function OffersSection({
     loadOptions()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch offers through the API route — plan enforcement happens server-side
-  const fetchOffers = useCallback(async () => {
-    setLoading(true)
-
+  function buildParams(page = 0) {
     const params = new URLSearchParams()
     params.set('winning', String(winningOnly))
     params.set('scaling', String(scalingOnly))
@@ -80,18 +80,38 @@ export default function OffersSection({
     if (typeFilter !== 'All')    params.set('type', typeFilter)
     if (search)                  params.set('search', search)
     params.set('sort', sort)
+    if (page > 0)                params.set('page', String(page))
+    return params
+  }
 
-    const res  = await fetch(`/api/dashboard/offers?${params}`)
+  // Fetch offers through the API route — plan enforcement happens server-side
+  const fetchOffers = useCallback(async () => {
+    setLoading(true)
+    const res  = await fetch(`/api/dashboard/offers?${buildParams(0)}`)
     const json = await res.json()
     if (json.error) console.error('[OffersSection] fetch error:', json.error)
+    const newOffers = (json.offers ?? []) as SupabaseOffer[]
     setIsFree(json.isFree ?? !isPro)
-    setOffers((json.offers ?? []) as SupabaseOffer[])
+    setOffers(newOffers)
+    setPage(1)
+    setHasMore(!json.isFree && newOffers.length === 50)
     setLoading(false)
   }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly, scalingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchOffers()
   }, [fetchOffers])
+
+  async function loadMore() {
+    setLoadingMore(true)
+    const res  = await fetch(`/api/dashboard/offers?${buildParams(page)}`)
+    const json = await res.json()
+    const newOffers = (json.offers ?? []) as SupabaseOffer[]
+    setOffers(prev => [...prev, ...newOffers])
+    setPage(prev => prev + 1)
+    setHasMore(newOffers.length === 50)
+    setLoadingMore(false)
+  }
 
   return (
     <div>
@@ -204,16 +224,30 @@ export default function OffersSection({
           No offers yet. Check back soon.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          {offers.map((offer) => (
-            <OfferCard
-              key={offer.id}
-              offer={offer}
-              winning={winningOnly}
-              locked={isFree}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {offers.map((offer) => (
+              <OfferCard
+                key={offer.id}
+                offer={offer}
+                winning={winningOnly}
+                locked={isFree}
+              />
+            ))}
+          </div>
+
+          {hasMore && (
+            <div className="text-center mt-8">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-6 py-2.5 border border-zinc-700 text-zinc-400 hover:text-white hover:border-zinc-500 rounded-lg text-sm cursor-pointer transition-colors disabled:opacity-50"
+              >
+                {loadingMore ? 'Loading…' : 'Load More'}
+              </button>
+            </div>
+          )}
+        </>
       )}
 
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}

@@ -11,4 +11,4 @@
 
 | File | Description | Status |
 |------|-------------|--------|
-| 20250517_phase3_security.sql | Phase 3 audit — profiles columns, RLS on 8 tables, user-facing policies | Pending |
+| 20250517_phase3_security.sql | Phase 3 audit — profiles columns, RLS on 8 tables, user-facing policies | Applied — 2026-05-18 |

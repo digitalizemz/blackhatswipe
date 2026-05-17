@@ -63,6 +63,7 @@ export default function TicketDetailPage() {
   const [messages,   setMessages]   = useState<Message[]>([])
   const [feedback,   setFeedback]   = useState<Feedback | null>(null)
   const [loading,    setLoading]    = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [notFound,   setNotFound]   = useState(false)
 
   const [reply,      setReply]      = useState('')
@@ -77,13 +78,20 @@ export default function TicketDetailPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   async function load() {
-    const res  = await fetch(`/api/support/tickets/${id}`)
-    if (res.status === 404) { setNotFound(true); setLoading(false); return }
-    const body = await res.json()
-    setTicket(body.ticket)
-    setMessages(body.messages ?? [])
-    setFeedback(body.feedback ?? null)
-    setLoading(false)
+    setFetchError(null)
+    try {
+      const res = await fetch(`/api/support/tickets/${id}`)
+      if (res.status === 404) { setNotFound(true); return }
+      if (!res.ok) throw new Error('Failed to load ticket')
+      const body = await res.json()
+      setTicket(body.ticket)
+      setMessages(body.messages ?? [])
+      setFeedback(body.feedback ?? null)
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -124,6 +132,13 @@ export default function TicketDetailPage() {
       </div>
     )
   }
+
+  if (fetchError) return (
+    <div className="p-8 text-center">
+      <p className="text-red-500 mb-4">{fetchError}</p>
+      <button onClick={load} className="text-zinc-400 hover:text-white underline text-sm cursor-pointer">Try again</button>
+    </div>
+  )
 
   if (notFound || !ticket) {
     return (

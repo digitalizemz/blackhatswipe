@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -217,8 +218,8 @@ function VariantsGrid({
               <div key={a.id} className="bg-[#111] border border-[#1C1C1C] rounded-lg overflow-hidden group relative">
                 {/* Preview */}
                 {isAttachmentImage(a) ? (
-                  <div className="aspect-video bg-zinc-900 overflow-hidden">
-                    <img src={a.url} alt={a.name} className="w-full h-full object-cover" />
+                  <div className="aspect-video bg-zinc-900 overflow-hidden relative">
+                    <Image src={a.url} alt={a.name ?? ''} fill className="object-cover" />
                   </div>
                 ) : isAttachmentVideo(a) ? (
                   <div className="aspect-video bg-zinc-900 relative overflow-hidden">
@@ -419,9 +420,9 @@ function EditCreativeModal({
           <div className="w-56 shrink-0 border-r border-[#1A1A1A] flex flex-col">
             <div className="flex-1 bg-zinc-950 flex items-center justify-center overflow-hidden min-h-0">
               {ytId ? (
-                <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="w-full object-cover" />
+                <Image src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} width={224} height={126} className="w-full object-cover" />
               ) : isImage ? (
-                <img src={mediaUrl} alt={name} className="max-w-full max-h-48 object-contain" />
+                <Image src={mediaUrl} alt={name} width={224} height={192} className="max-w-full max-h-48 object-contain" />
               ) : isVideo ? (
                 <video src={mediaUrl} className="max-w-full max-h-48" muted preload="metadata" />
               ) : (
@@ -656,7 +657,7 @@ function CreativeCard({ creative, onEdit, onDelete }: {
       <div className="aspect-[4/3] relative bg-zinc-900 cursor-pointer" onClick={() => onEdit(creative)}>
         {ytId ? (
           <>
-            <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+            <Image src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`} alt={name} fill className="object-cover" />
             <div className="absolute inset-0 flex items-center justify-center bg-black/40">
               <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center">
                 <span className="text-black text-sm ml-0.5">▶</span>
@@ -664,7 +665,7 @@ function CreativeCard({ creative, onEdit, onDelete }: {
             </div>
           </>
         ) : isImageUrl(creative.file_url, creative.file_type) ? (
-          <img src={creative.file_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+          <Image src={creative.file_url} alt={name} fill className="object-cover" />
         ) : isVideoUrl(creative.file_url, creative.file_type) ? (
           <>
             <video src={creative.file_url} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />

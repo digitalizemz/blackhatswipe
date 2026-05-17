@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { SupabaseOffer } from '@/types/offer'
@@ -89,10 +90,11 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
       {/* ── Cover Image ── */}
       <div className={cn('relative h-[200px] bg-gradient-to-br shrink-0 overflow-hidden', gradientCls)}>
         {offer.thumbnail_url && (
-          <img
+          <Image
             src={offer.thumbnail_url}
             alt={offer.title}
-            className="absolute inset-0 w-full h-full object-cover"
+            fill
+            className="object-cover"
           />
         )}
 

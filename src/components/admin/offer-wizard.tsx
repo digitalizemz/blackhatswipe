@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -408,7 +409,7 @@ export default function OfferWizard() {
             {thumbTab === 'url' ? (
               <div>
                 <input type="url" value={thumbnailUrl} onChange={(e) => setThumbnailUrl(e.target.value)} placeholder="https://…" className={inputCls} />
-                {thumbnailUrl && <img src={thumbnailUrl} alt="Preview" className="mt-3 w-full max-h-48 object-cover rounded-lg" />}
+                {thumbnailUrl && <Image src={thumbnailUrl} alt="Preview" width={800} height={192} className="mt-3 w-full max-h-48 object-cover rounded-lg" unoptimized />}
               </div>
             ) : (
               <div>
@@ -425,7 +426,7 @@ export default function OfferWizard() {
                     </>
                   )}
                 </div>
-                {thumbnailUrl && !thumbUploading && <img src={thumbnailUrl} alt="Preview" className="mt-3 w-full max-h-48 object-cover rounded-lg" />}
+                {thumbnailUrl && !thumbUploading && <Image src={thumbnailUrl} alt="Preview" width={800} height={192} className="mt-3 w-full max-h-48 object-cover rounded-lg" unoptimized />}
               </div>
             )}
           </div>
