@@ -14,7 +14,7 @@ export async function GET(
   // Plan check — role and plan come from the profiles table via admin client,
   // never from user.user_metadata which users can write themselves.
   const supabaseAdmin = createAdminClient()
-  const { data: profile, error: profileError } = await supabaseAdmin
+  const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('plan, role')
     .eq('id', user.id)
@@ -25,8 +25,6 @@ export async function GET(
     profile.role === 'admin' ||
     profile.role === 'editor'
   )
-
-  console.log('[offers/[id]] user:', user.id, 'profile:', profile, 'profileError:', profileError, 'hasAccess:', hasAccess)
 
   if (!hasAccess) return NextResponse.json({ error: 'Pro subscription required' }, { status: 403 })
 
