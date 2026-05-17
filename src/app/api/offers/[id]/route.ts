@@ -11,21 +11,24 @@ export async function GET(
   const { data: { user } } = await serverClient.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Plan check
+  // Plan check — role and plan come from the profiles table via admin client,
+  // never from user.user_metadata which users can write themselves.
   const supabaseAdmin = createAdminClient()
-  const { data: profile } = await supabaseAdmin
+  const { data: profile, error: profileError } = await supabaseAdmin
     .from('profiles')
     .select('plan, role')
     .eq('id', user.id)
     .single()
 
-  const isPro =
-    profile?.plan === 'pro' ||
-    profile?.plan === 'admin' ||
-    profile?.role === 'admin' ||
-    profile?.role === 'editor'
+  const hasAccess = profile && (
+    profile.plan === 'pro' ||
+    profile.role === 'admin' ||
+    profile.role === 'editor'
+  )
 
-  if (!isPro) return NextResponse.json({ error: 'Pro subscription required' }, { status: 403 })
+  console.log('[offers/[id]] user:', user.id, 'profile:', profile, 'profileError:', profileError, 'hasAccess:', hasAccess)
+
+  if (!hasAccess) return NextResponse.json({ error: 'Pro subscription required' }, { status: 403 })
 
   const { id } = await params
 
