@@ -96,11 +96,10 @@ export async function upsertOffer(data: AdminOffer): Promise<{ id?: string; erro
     }
 
     if (save_snapshot && offerId) {
-      await supabase.from('offer_ad_snapshots').insert({
-        offer_id: offerId,
-        ads_count: data.today_ads ?? 0,
-        snapshotted_at: new Date().toISOString(),
-      })
+      await supabase.from('offer_ad_snapshots').upsert(
+        { offer_id: offerId, ad_count: data.today_ads ?? 0, snapshot_date: new Date().toISOString().split('T')[0] },
+        { onConflict: 'offer_id,snapshot_date' },
+      )
     }
 
     revalidatePath('/admin/offers')
