@@ -261,8 +261,12 @@ export default function OfferDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [offer,      setOffer]      = useState<any>(null)
   const [allFiles,   setAllFiles]   = useState<OfferFile[]>([])
-  const [loading,    setLoading]    = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+
+  // Single unified state — eliminates the race condition between data fetch and plan check.
+  // The API route /api/offers/[id] already enforces the plan server-side, so a 401/403
+  // response is the authoritative signal that the user is locked out.
+  const [pageState, setPageState] = useState<'loading' | 'accessible' | 'locked'>('loading')
 
   const [selectedVslIndex,  setSelectedVslIndex]  = useState(0)
   const [selectedCreative,  setSelectedCreative]  = useState<OfferFile | null>(null)
@@ -271,62 +275,28 @@ export default function OfferDetailPage() {
   const [creativeFilters,   setCreativeFilters]   = useState<Set<string>>(new Set())
   const [creativeSort,      setCreativeSort]      = useState<'views' | 'recent' | 'name'>('recent')
 
-  const [showUpgrade,   setShowUpgrade]   = useState(false)
-  const [accessChecked, setAccessChecked] = useState(false)
-
-  useEffect(() => {
-    const checkAccess = async () => {
-      const supabaseClient = createClient()
-      const { data: { user: authUser } } = await supabaseClient.auth.getUser()
-
-      if (!authUser) {
-        setShowUpgrade(true)
-        setAccessChecked(true)
-        return
-      }
-
-      const { data, error } = await supabaseClient
-        .from('profiles')
-        .select('plan, role')
-        .eq('id', authUser.id)
-        .single()
-
-      if (error || !data) {
-        setShowUpgrade(false)
-        setAccessChecked(true)
-        return
-      }
-
-      const isPro =
-        data.plan === 'pro' ||
-        data.role === 'admin' ||
-        data.role === 'editor' ||
-        data.plan === 'admin'
-
-      setShowUpgrade(!isPro)
-      setAccessChecked(true)
-    }
-
-    checkAccess()
-  }, [])
-  const [showReport,   setShowReport]   = useState(false)
+  const [showReport, setShowReport] = useState(false)
 
   useEffect(() => {
     if (!id) return
     fetch(`/api/offers/${id}`)
-      .then(res => res.json())
-      .then(json => {
+      .then(async res => {
+        if (res.status === 401 || res.status === 403) {
+          setPageState('locked')
+          return
+        }
+        const json = await res.json()
         if (json.error) {
           setFetchError(json.error)
         } else {
           setOffer(json.offer)
           setAllFiles((json.files ?? []) as OfferFile[])
         }
-        setLoading(false)
+        setPageState('accessible')
       })
       .catch(err => {
         setFetchError(err?.message ?? 'Unexpected error')
-        setLoading(false)
+        setPageState('accessible')
       })
   }, [id])
 
@@ -350,14 +320,18 @@ export default function OfferDetailPage() {
     else       setToast({ message: 'Saved ✓', type: 'success' })
   }
 
-  // ── Loading / not found ─────────────────────────────────────────────────────
-  if (loading || !accessChecked) {
+  // ── Loading / locked / not found ───────────────────────────────────────────
+  if (pageState === 'loading') {
     return (
       <div className="p-8 flex items-center gap-2 text-zinc-500 text-sm">
         <div className="w-4 h-4 rounded-full border-2 border-zinc-600 border-t-zinc-300 animate-spin" />
         Loading offer…
       </div>
     )
+  }
+
+  if (pageState === 'locked') {
+    return <UpgradeModal onClose={() => window.history.back()} />
   }
 
   if (!offer) {
@@ -774,7 +748,6 @@ export default function OfferDetailPage() {
         />
       )}
 
-      {accessChecked && showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </div>
   )
 }

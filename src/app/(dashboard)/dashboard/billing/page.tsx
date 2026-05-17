@@ -302,10 +302,10 @@ export default function BillingPage() {
             Get full access to all offers, creatives, and scaling intelligence.
           </p>
           <a
-            href="/pricing"
+            href="mailto:support@blackhatswipe.com?subject=Upgrade to Pro"
             className="inline-flex items-center justify-center w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm transition-all"
           >
-            View Pro Plans →
+            Contact Us to Upgrade →
           </a>
         </div>
       )}

@@ -251,12 +251,12 @@ export default function SettingsPage() {
               >
                 Cancel
               </button>
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 h-9 border border-red-400/20 text-red-400/60 rounded-lg text-xs cursor-default"
+              <a
+                href="mailto:support@blackhatswipe.com?subject=Delete my account"
+                className="flex-1 h-9 flex items-center justify-center border border-red-400/40 text-red-400 hover:text-red-300 hover:border-red-400/60 rounded-lg text-xs transition-colors"
               >
                 Contact support to delete
-              </button>
+              </a>
             </div>
           </div>
         )}

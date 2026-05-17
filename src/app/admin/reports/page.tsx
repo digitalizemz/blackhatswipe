@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 
 type FilterTab = 'open' | 'resolved' | 'all'
@@ -49,27 +48,30 @@ function relativeTime(iso: string): string {
 const thCls = 'text-xs uppercase tracking-wider text-zinc-500 font-semibold px-5 py-3 text-left'
 
 export default function AdminReportsPage() {
-  const supabase = createClient()
   const [reports,   setReports]   = useState<Report[]>([])
   const [loading,   setLoading]   = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [filter,    setFilter]    = useState<FilterTab>('open')
   const [resolving, setResolving] = useState<string | null>(null)
   const [deleting,  setDeleting]  = useState<string | null>(null)
 
-  useEffect(() => {
+  const loadReports = () => {
     setLoading(true)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let q: any = supabase
-      .from('offer_reports')
-      .select('*, offers(title, niches(name))')
-      .order('created_at', { ascending: false })
+    setFetchError(null)
+    fetch(`/api/admin/reports?status=${filter}`)
+      .then(res => res.json())
+      .then(json => {
+        setReports((json.reports ?? []) as Report[])
+        setLoading(false)
+      })
+      .catch(err => {
+        setFetchError(err?.message ?? 'Failed to load reports')
+        setLoading(false)
+      })
+  }
 
-    if (filter !== 'all') q = q.eq('status', filter)
-
-    q.then(({ data }: { data: unknown }) => {
-      setReports((data ?? []) as Report[])
-      setLoading(false)
-    })
+  useEffect(() => {
+    loadReports()
   }, [filter]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleResolve(id: string) {
@@ -118,6 +120,14 @@ export default function AdminReportsPage() {
           ))}
         </div>
       </div>
+
+      {/* Error state */}
+      {fetchError && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-red-900/20 border border-red-800/40 text-red-400 text-sm flex items-center gap-3">
+          <span>Error loading reports: {fetchError}</span>
+          <button onClick={loadReports} className="underline hover:no-underline cursor-pointer">Retry</button>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl overflow-hidden">

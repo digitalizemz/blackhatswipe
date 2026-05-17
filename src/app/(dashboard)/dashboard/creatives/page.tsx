@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
 import { CreativeModal, OfferFile, extractYouTubeId, CREATIVE_STATUS_BADGE } from '@/components/dashboard/creative-modal'
 import { useUserProfile, userIsPro, useUpgradeModal } from '@/lib/user-profile-context'
@@ -185,7 +184,6 @@ function Select({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CreativesPage() {
-  const supabase     = createClient()
   const profile      = useUserProfile()
   const isPro        = userIsPro(profile)
   const upgradeModal = useUpgradeModal()
@@ -204,25 +202,14 @@ export default function CreativesPage() {
   const [scalingOnly, setScalingOnly] = useState(false)
 
   useEffect(() => {
-    supabase
-      .from('offer_files')
-      .select(`
-        *,
-        offers(
-          id, title,
-          niches(name, color),
-          languages(name, flag_emoji),
-          traffic_sources(name)
-        )
-      `)
-      .eq('folder_name', '__creatives__')
-      .order('created_at', { ascending: false })
-      .limit(300)
-      .then(({ data }) => {
-        setRows((data ?? []) as unknown as CreativeRow[])
+    fetch('/api/dashboard/creatives')
+      .then(res => res.json())
+      .then(json => {
+        setRows((json.creatives ?? []) as unknown as CreativeRow[])
         setLoading(false)
       })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      .catch(() => setLoading(false))
+  }, [])
 
   // Derive unique filter options from loaded data
   const niches   = useMemo(() => Array.from(new Set(rows.map(r => r.offers?.niches?.name).filter(Boolean))).sort() as string[], [rows])

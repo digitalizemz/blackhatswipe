@@ -8,9 +8,6 @@ import UpgradeModal from '@/components/ui/upgrade-modal'
 import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
 import type { SupabaseOffer } from '@/types/offer'
 
-// Demo offers kept only as dev reference — never rendered
-// import { demoOffers } from '@/lib/demo-offers'
-
 interface FilterOption {
   id: string
   name: string
@@ -30,28 +27,30 @@ interface OffersSectionProps {
 export default function OffersSection({
   winningOnly = false,
 }: OffersSectionProps) {
-  const supabase    = createClient()
-  const profile     = useUserProfile()
-  const isPro       = userIsPro(profile)
+  // Browser client only used for reference-data dropdowns (no sensitive data)
+  const supabase = createClient()
+  const profile  = useUserProfile()
+  const isPro    = userIsPro(profile)
 
-  const [offers, setOffers] = useState<SupabaseOffer[]>([])
-  const [loading, setLoading] = useState(true)
+  const [offers, setOffers]       = useState<SupabaseOffer[]>([])
+  const [isFree, setIsFree]       = useState(!isPro)
+  const [loading, setLoading]     = useState(true)
   const [showUpgrade, setShowUpgrade] = useState(false)
 
-  const [niches, setNiches] = useState<FilterOption[]>([])
-  const [languages, setLanguages] = useState<FilterOption[]>([])
+  const [niches, setNiches]               = useState<FilterOption[]>([])
+  const [languages, setLanguages]         = useState<FilterOption[]>([])
   const [trafficSources, setTrafficSources] = useState<FilterOption[]>([])
-  const [offerTypes, setOfferTypes] = useState<FilterOption[]>([])
+  const [offerTypes, setOfferTypes]       = useState<FilterOption[]>([])
 
-  const [search, setSearch] = useState('')
-  const [typeFilter, setTypeFilter] = useState('All')
-  const [langFilter, setLangFilter] = useState('All')
+  const [search, setSearch]           = useState('')
+  const [typeFilter, setTypeFilter]   = useState('All')
+  const [langFilter, setLangFilter]   = useState('All')
   const [trafficFilter, setTrafficFilter] = useState('All')
   const [nicheFilter, setNicheFilter] = useState('All')
-  const [sort, setSort] = useState('Latest')
+  const [sort, setSort]               = useState('Latest')
   const [scalingOnly, setScalingOnly] = useState(false)
 
-  // Load filter options once on mount
+  // Load filter reference data once — these tables have no sensitive data
   useEffect(() => {
     async function loadOptions() {
       const [nichesRes, langsRes, trafficRes, typesRes] = await Promise.all([
@@ -68,33 +67,25 @@ export default function OffersSection({
     loadOptions()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Fetch offers through the API route — plan enforcement happens server-side
   const fetchOffers = useCallback(async () => {
     setLoading(true)
 
-    let query = supabase
-      .from('offers')
-      .select('*, niches(name, color), languages(name, code, flag_emoji), traffic_sources(name), offer_types(name), offer_files(id, folder_name, cpm_estimated, initial_views)')
-      .eq('status', 'active')
+    const params = new URLSearchParams()
+    params.set('winning', String(winningOnly))
+    params.set('scaling', String(scalingOnly))
+    if (nicheFilter !== 'All')   params.set('niche', nicheFilter)
+    if (langFilter !== 'All')    params.set('lang', langFilter)
+    if (trafficFilter !== 'All') params.set('traffic', trafficFilter)
+    if (typeFilter !== 'All')    params.set('type', typeFilter)
+    if (search)                  params.set('search', search)
+    params.set('sort', sort)
 
-    if (winningOnly) {
-      query = query.eq('is_winning', true)
-    }
-    if (scalingOnly) query = query.eq('scaling_status', 'scaling')
-    if (nicheFilter !== 'All') query = query.eq('niche_id', nicheFilter)
-    if (langFilter !== 'All') query = query.eq('language_id', langFilter)
-    if (trafficFilter !== 'All') query = query.eq('traffic_source_id', trafficFilter)
-    if (typeFilter !== 'All') query = query.eq('offer_type_id', typeFilter)
-    if (search) query = query.ilike('title', `%${search}%`)
-
-    if (sort === 'Most Views') {
-      query = query.order('total_views', { ascending: false, nullsFirst: false })
-    } else {
-      query = query.order('created_at', { ascending: false })
-    }
-
-    const { data, error } = await query
-    if (error) console.error('[OffersSection] fetch error:', error)
-    setOffers((data ?? []) as SupabaseOffer[])
+    const res  = await fetch(`/api/dashboard/offers?${params}`)
+    const json = await res.json()
+    if (json.error) console.error('[OffersSection] fetch error:', json.error)
+    setIsFree(json.isFree ?? !isPro)
+    setOffers((json.offers ?? []) as SupabaseOffer[])
     setLoading(false)
   }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly, scalingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -191,7 +182,7 @@ export default function OffersSection({
             </div>
           ))}
         </div>
-      ) : !isPro && winningOnly ? (
+      ) : isFree && winningOnly ? (
         /* Steal These — full page lock for free users */
         <div className="flex flex-col items-center justify-center py-28 text-center">
           <div className="w-16 h-16 rounded-2xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-3xl mb-5">
@@ -219,7 +210,7 @@ export default function OffersSection({
               key={offer.id}
               offer={offer}
               winning={winningOnly}
-              locked={!isPro}
+              locked={isFree}
             />
           ))}
         </div>
