@@ -35,9 +35,6 @@ export async function PATCH(
   if (body.assigned_to)   update.assigned_to   = body.assigned_to
   if (body.assigned_name) update.assigned_name = body.assigned_name
 
-  const { data: ticket } = await admin
-    .from('support_tickets').select('user_email, subject').eq('id', id).single()
-
   const { error } = await admin.from('support_tickets').update(update).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
