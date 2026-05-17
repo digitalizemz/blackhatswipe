@@ -42,13 +42,6 @@ export async function PATCH(
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   // TODO: send email via Resend for status changes
-  if (body.status && ticket) {
-    if (body.status === 'in_progress') {
-      console.log(`[SUPPORT] Ticket "${ticket.subject}" in progress → notify ${ticket.user_email}`)
-    } else if (body.status === 'resolved') {
-      console.log(`[SUPPORT] Ticket "${ticket.subject}" resolved → notify ${ticket.user_email}`)
-    }
-  }
 
   return NextResponse.json({ success: true })
 }

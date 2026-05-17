@@ -1,4 +1,10 @@
+import { createClient } from '@/lib/supabase/server'
+
 export async function POST(request: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 })
+
   const { type, ticketId, subject, userEmail, staffName } = await request.json()
 
   // TODO: send email via Resend

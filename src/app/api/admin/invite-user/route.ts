@@ -1,11 +1,5 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 import { requireAdmin } from '@/lib/supabase/require-admin'
-
-const supabaseAdmin = createSupabaseClient(
-  'https://lladxcxjmxtrsorvagql.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
-  { auth: { persistSession: false, autoRefreshToken: false } }
-)
 
 export async function POST(request: Request) {
   const auth = await requireAdmin()
@@ -13,6 +7,8 @@ export async function POST(request: Request) {
 
   const { email, full_name, phone, role = 'user', plan = 'free' } = await request.json()
   if (!email) return Response.json({ error: 'Email is required' }, { status: 400 })
+
+  const supabaseAdmin = createAdminClient()
 
   const isProd = process.env.NODE_ENV === 'production'
   const baseUrl = isProd

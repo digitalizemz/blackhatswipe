@@ -1,14 +1,13 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin-client'
+import { requireAdmin } from '@/lib/supabase/require-admin'
 import { NextRequest, NextResponse } from 'next/server'
 
-const admin = createSupabaseClient(
-  'https://lladxcxjmxtrsorvagql.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
-  { auth: { persistSession: false, autoRefreshToken: false } },
-)
-
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireAdmin()
+  if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
   try {
+    const admin = createAdminClient()
     const body = await request.json()
     const { data, error } = await admin
       .from('offer_files')
@@ -30,7 +29,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requireAdmin()
+  if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
   try {
+    const admin = createAdminClient()
     await admin.from('offer_files').delete().eq('id', params.id)
     try { await admin.from('creative_snapshots').delete().eq('creative_id', params.id) } catch { /* table may not exist */ }
     return NextResponse.json({ success: true })

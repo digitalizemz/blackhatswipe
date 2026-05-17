@@ -1,11 +1,6 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin-client'
+import { requireAdmin } from '@/lib/supabase/require-admin'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabaseAdmin = createSupabaseClient(
-  'https://lladxcxjmxtrsorvagql.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
-  { auth: { persistSession: false, autoRefreshToken: false } },
-)
 
 function sanitizeFileName(name: string): string {
   return name
@@ -17,7 +12,11 @@ function sanitizeFileName(name: string): string {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
   try {
+    const supabaseAdmin = createAdminClient()
     const { searchParams } = new URL(req.url)
     const creativeId = searchParams.get('creative_id')
 
@@ -45,7 +44,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAdmin()
+  if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status })
+
   try {
+    const supabaseAdmin = createAdminClient()
     const form       = await req.formData()
     const file       = form.get('file') as File | null
     const creativeId = form.get('creative_id') as string | null

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useState } from 'react'
 import UpgradeModal from '@/components/ui/upgrade-modal'
 
 export interface UserProfile {
@@ -68,11 +68,6 @@ export function UserProfileProvider({
   role: string
 }) {
   const [upgradeOpen, setUpgradeOpen] = useState(false)
-
-  useEffect(() => {
-    const isPro = userIsPro({ plan, role })
-    console.log('[UserProfile] plan:', plan, '| role:', role, '| isPro:', isPro)
-  }, [plan, role])
 
   return (
     <Ctx.Provider value={{ plan, role }}>

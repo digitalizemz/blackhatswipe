@@ -94,7 +94,6 @@ export default function OffersSection({
 
     const { data, error } = await query
     if (error) console.error('[OffersSection] fetch error:', error)
-    console.log('[OffersSection] fetched:', data?.length ?? 0, 'offers | isPro:', isPro)
     setOffers((data ?? []) as SupabaseOffer[])
     setLoading(false)
   }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly, scalingOnly]) // eslint-disable-line react-hooks/exhaustive-deps

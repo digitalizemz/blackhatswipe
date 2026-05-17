@@ -1,16 +1,32 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin-client'
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabaseAdmin = createSupabaseClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://lladxcxjmxtrsorvagql.supabase.co',
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
-  { auth: { persistSession: false, autoRefreshToken: false } },
-)
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // Session check
+  const serverClient = await createClient()
+  const { data: { user } } = await serverClient.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Plan check
+  const supabaseAdmin = createAdminClient()
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('plan, role')
+    .eq('id', user.id)
+    .single()
+
+  const isPro =
+    profile?.plan === 'pro' ||
+    profile?.plan === 'admin' ||
+    profile?.role === 'admin' ||
+    profile?.role === 'editor'
+
+  if (!isPro) return NextResponse.json({ error: 'Pro subscription required' }, { status: 403 })
+
   const { id } = await params
 
   const [offerRes, filesRes] = await Promise.all([
