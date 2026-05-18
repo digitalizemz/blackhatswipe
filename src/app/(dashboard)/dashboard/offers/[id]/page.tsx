@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
@@ -257,6 +257,7 @@ function Toast({ message, type, onHide }: { message: string; type: 'success' | '
 
 export default function OfferDetailPage() {
   const { id }   = useParams<{ id: string }>()
+  const router   = useRouter()
   const supabase = createClient()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -282,8 +283,17 @@ export default function OfferDetailPage() {
     if (!id) return
     fetch(`/api/offers/${id}`)
       .then(async res => {
-        if (res.status === 401 || res.status === 403) {
+        if (res.status === 401) {
+          router.push('/login')
+          return
+        }
+        if (res.status === 403) {
           setPageState('locked')
+          return
+        }
+        if (res.status === 404) {
+          setFetchError('Offer not found.')
+          setPageState('accessible')
           return
         }
         const json = await res.json()
@@ -299,7 +309,7 @@ export default function OfferDetailPage() {
         setFetchError(err?.message ?? 'Unexpected error')
         setPageState('accessible')
       })
-  }, [id])
+  }, [id, router])
 
   async function handleSaveSwipe() {
     const { data: { user } } = await supabase.auth.getUser()
