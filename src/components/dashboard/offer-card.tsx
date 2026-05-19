@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { SupabaseOffer } from '@/types/offer'
 import { TrafficIcon } from '@/components/ui/traffic-icon'
@@ -58,7 +57,6 @@ interface OfferCardProps {
 
 export default function OfferCard({ offer, winning = false, locked = false }: OfferCardProps) {
   const [showUpgrade, setShowUpgrade] = useState(false)
-  const router = useRouter()
 
   // Creative stats computed from the joined offer_files
   const creativeFiles  = (offer.offer_files ?? []).filter(f => f.folder_name === '__creatives__')
@@ -194,20 +192,14 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
             </span>
           )}
           {!locked && (
-            <Link
-              href={`/dashboard/offers/${offer.id}`}
-              onClick={e => e.stopPropagation()}
-              className="text-yellow-400 text-xs font-medium hover:text-yellow-300 transition-colors"
-            >
+            <span className="text-yellow-400 text-xs font-medium hover:text-yellow-300 transition-colors">
               View Offer →
-            </Link>
+            </span>
           )}
         </div>
       </div>
     </>
   )
-
-  console.log('[OffersSection] offer.id:', offer.id, 'href:', `/dashboard/offers/${offer.id}`)
 
   return (
     <>
@@ -216,9 +208,9 @@ export default function OfferCard({ offer, winning = false, locked = false }: Of
           {cardBody}
         </div>
       ) : (
-        <div className={cardCls} onClick={() => router.push(`/dashboard/offers/${offer.id}`)}>
+        <Link href={`/dashboard/offers/${offer.id}`} className={cardCls}>
           {cardBody}
-        </div>
+        </Link>
       )}
       {showUpgrade && <UpgradeModal onClose={() => setShowUpgrade(false)} />}
     </>
