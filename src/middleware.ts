@@ -25,18 +25,20 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // IMPORTANT: do not add any logic between createServerClient and auth.getUser()
   const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
-  }
+  const { pathname } = request.nextUrl
 
-  if (!user && request.nextUrl.pathname.startsWith('/admin')) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/login'
-    return NextResponse.redirect(url)
+  // Allow RSC prefetch requests to pass through without redirect
+  const isRscRequest = request.headers.get('RSC') === '1' || request.nextUrl.searchParams.has('_rsc')
+
+  if (!user && !isRscRequest) {
+    if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/login'
+      return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse
@@ -44,9 +46,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/dashboard/:path*',
-    '/admin/:path*',
-    '/api/dashboard/:path*',
-    '/api/admin/:path*',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
