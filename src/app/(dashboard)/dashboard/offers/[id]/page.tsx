@@ -307,7 +307,7 @@ export default function OfferDetailPage() {
         setFetchError(err?.message ?? 'Unexpected error')
         setPageState('error')
       })
-  }, [id, router])
+  }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSaveSwipe() {
     const { data: { user } } = await supabase.auth.getUser()
