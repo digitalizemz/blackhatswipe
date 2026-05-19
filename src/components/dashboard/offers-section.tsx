@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import OfferCard from './offer-card'
@@ -85,22 +85,32 @@ export default function OffersSection({
   }
 
   // Fetch offers through the API route — plan enforcement happens server-side
-  const fetchOffers = useCallback(async () => {
-    setLoading(true)
-    const res  = await fetch(`/api/dashboard/offers?${buildParams(0)}`)
-    const json = await res.json()
-    if (json.error) console.error('[OffersSection] fetch error:', json.error)
-    const newOffers = (json.offers ?? []) as SupabaseOffer[]
-    setIsFree(json.isFree ?? !isPro)
-    setOffers(newOffers)
-    setPage(1)
-    setHasMore(!json.isFree && newOffers.length === 50)
-    setLoading(false)
-  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly, scalingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
+    const controller = new AbortController()
+
+    async function fetchOffers() {
+      setLoading(true)
+      try {
+        const res = await fetch(`/api/dashboard/offers?${buildParams(0)}`, { signal: controller.signal })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const json = await res.json()
+        if (json.error) console.error('[OffersSection] fetch error:', json.error)
+        const newOffers = (json.offers ?? []) as SupabaseOffer[]
+        setIsFree(json.isFree ?? !isPro)
+        setOffers(newOffers)
+        setPage(1)
+        setHasMore(!json.isFree && newOffers.length === 50)
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        console.error('[OffersSection] fetch failed:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
     fetchOffers()
-  }, [fetchOffers])
+    return () => controller.abort()
+  }, [search, typeFilter, langFilter, trafficFilter, nicheFilter, sort, winningOnly, scalingOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadMore() {
     setLoadingMore(true)
