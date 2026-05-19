@@ -268,7 +268,7 @@ export default function OfferDetailPage() {
   // Single unified state — eliminates the race condition between data fetch and plan check.
   // The API route /api/offers/[id] already enforces the plan server-side, so a 401/403
   // response is the authoritative signal that the user is locked out.
-  const [pageState, setPageState] = useState<'loading' | 'accessible' | 'locked'>('loading')
+  const [pageState, setPageState] = useState<'loading' | 'accessible' | 'locked' | 'error'>('loading')
 
   const [selectedVslIndex,  setSelectedVslIndex]  = useState(0)
   const [selectedCreative,  setSelectedCreative]  = useState<OfferFile | null>(null)
@@ -291,23 +291,21 @@ export default function OfferDetailPage() {
           setPageState('locked')
           return
         }
-        if (res.status === 404) {
-          setFetchError('Offer not found.')
-          setPageState('accessible')
+        if (!res.ok) {
+          console.error('[offer detail] API returned:', res.status, 'for offer:', id)
+          setFetchError(`Error ${res.status}: could not load offer`)
+          setPageState('error')
           return
         }
         const json = await res.json()
-        if (json.error) {
-          setFetchError(json.error)
-        } else {
-          setOffer(json.offer)
-          setAllFiles((json.files ?? []) as OfferFile[])
-        }
+        setOffer(json.offer)
+        setAllFiles((json.files ?? []) as OfferFile[])
         setPageState('accessible')
       })
       .catch(err => {
+        console.error('[offer detail] fetch failed for offer:', id, err)
         setFetchError(err?.message ?? 'Unexpected error')
-        setPageState('accessible')
+        setPageState('error')
       })
   }, [id, router])
 
@@ -343,6 +341,19 @@ export default function OfferDetailPage() {
 
   if (pageState === 'locked') {
     return <UpgradeModal onClose={() => window.history.back()} />
+  }
+
+  if (pageState === 'error') {
+    return (
+      <div className="p-8">
+        <p className="text-red-400 text-sm font-medium mb-2">
+          {fetchError ?? 'Something went wrong loading this offer.'}
+        </p>
+        <Link href="/dashboard/offers" className="text-zinc-400 hover:text-white text-sm inline-block">
+          ← Back to Offers
+        </Link>
+      </div>
+    )
   }
 
   if (!offer) {

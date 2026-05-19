@@ -31,8 +31,7 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
+  const { data: { user } } = await supabase.auth.getUser()
 
   // Public routes
   if (pathname === '/set-password' || pathname === '/reset-password') {
