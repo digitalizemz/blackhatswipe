@@ -8,7 +8,7 @@ const BULLETS = [
   'The exact ad structure that gets sales without a big budget',
   'How to set up your funnel fast (even if you\'ve never done it before)',
   'The traffic method that works even with $5/day',
-  'Personal support from Shelton via WhatsApp & Telegram',
+  'Personal onboarding support via WhatsApp & Telegram',
 ]
 
 function UpsellContent() {
@@ -21,7 +21,7 @@ function UpsellContent() {
 
   async function handleAccept() {
     if (!sessionId) {
-      setError('Session not found. Please contact support.')
+      router.push('/dashboard/welcome')
       return
     }
     setLoading(true)
@@ -63,7 +63,7 @@ function UpsellContent() {
             Congratulations! Your BlackHat Swipe<br />Pro Access Is Ready.
           </h1>
           <p className="text-zinc-400 text-lg">
-            Before you enter the platform, watch this important message from Shelton:
+            Before you enter the platform, watch this important message:
           </p>
         </div>
 
@@ -100,12 +100,12 @@ function UpsellContent() {
               to launch your first winning offer.
             </p>
             <p>
-              That&apos;s exactly why I created the{' '}
+              That&apos;s exactly why we created the{' '}
               <span className="text-white font-bold">First Sale in 24H</span> method.
             </p>
             <p>
-              This is the exact step-by-step system I used to go from zero to my first online sale —
-              and I&apos;ve simplified it so you can replicate it in 24 hours or less.
+              This is the exact step-by-step system used by our top students to go from zero to their first
+              online sale — simplified so you can replicate it in 24 hours or less.
             </p>
             <p className="text-white font-semibold">
               No guesswork. No wasted ad spend. Just a clear path to your first sale.
