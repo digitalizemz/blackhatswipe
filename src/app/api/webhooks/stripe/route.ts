@@ -3,6 +3,8 @@ import { headers } from 'next/headers'
 import { createAdminClient } from '@/lib/supabase/admin-client'
 import { NextResponse } from 'next/server'
 
+export const runtime = 'nodejs'
+
 export async function POST(request: Request) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
   const body        = await request.text()
@@ -22,10 +24,14 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient()
 
+  console.log('[webhook] received event:', event.type)
+
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
     const userId  = session.metadata?.userId
+    console.log('[webhook] userId from metadata:', userId)
     if (userId) {
+      console.log('[webhook] updating profile to pro...')
       await supabase
         .from('profiles')
         .update({
