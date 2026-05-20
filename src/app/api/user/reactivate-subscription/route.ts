@@ -17,38 +17,32 @@ export async function POST() {
       .single()
 
     if (profileError) {
-      console.error('[cancel-subscription] profile query error:', profileError.message)
+      console.error('[reactivate-subscription] profile query error:', profileError.message)
       return NextResponse.json({ error: profileError.message }, { status: 400 })
     }
 
     if (!profile?.stripe_subscription_id) {
-      return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
+      return NextResponse.json({ error: 'No subscription found' }, { status: 400 })
     }
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-    const subscription = await stripe.subscriptions.update(profile.stripe_subscription_id, {
-      cancel_at_period_end: true,
+    await stripe.subscriptions.update(profile.stripe_subscription_id, {
+      cancel_at_period_end: false,
     })
-
-    const periodEnd = subscription.items.data[0]?.current_period_end
-    const cancelAt  = periodEnd ? new Date(periodEnd * 1000).toISOString() : new Date().toISOString()
 
     const { error: updateError } = await admin
       .from('profiles')
-      .update({
-        plan_changed_at:        new Date().toISOString(),
-        subscription_cancel_at: cancelAt,
-      })
+      .update({ subscription_cancel_at: null })
       .eq('id', user.id)
 
     if (updateError) {
-      console.error('[cancel-subscription] profile update error:', updateError.message)
+      console.error('[reactivate-subscription] profile update error:', updateError.message)
     }
 
-    return NextResponse.json({ success: true, cancelAt })
+    return NextResponse.json({ success: true })
   } catch (error) {
     const err = error as Error
-    console.error('[cancel-subscription] error:', err.message)
+    console.error('[reactivate-subscription] error:', err.message)
     return NextResponse.json({ error: err.message }, { status: 400 })
   }
 }

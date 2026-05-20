@@ -25,7 +25,7 @@ function useToast(): [Toast, (msg: string, ok: boolean) => void] {
   const show = (msg: string, ok: boolean) => {
     clearTimeout(timer.current)
     setToast({ msg, ok })
-    timer.current = setTimeout(() => setToast(null), 4000)
+    timer.current = setTimeout(() => setToast(null), 5000)
   }
   return [toast, show]
 }
@@ -60,10 +60,13 @@ function CancelModal({ periodEnd, busy, onConfirm, onCancel }: CancelModalProps)
       <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl p-6 w-full max-w-sm shadow-2xl">
         <h3 className="text-base font-bold text-white mb-3">Cancel Subscription?</h3>
         <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
-          Are you sure? Your Pro access continues until the end of the current billing period.
-          {periodEnd && (
-            <> You will keep access until <span className="text-white font-medium">{periodEnd}</span>.</>
-          )}
+          Your Pro access will continue until{' '}
+          {periodEnd
+            ? <span className="text-white font-medium">{periodEnd}</span>
+            : 'the end of the current billing period'
+          }.
+          {' '}After that, you will lose access to all offers and features.
+          {' '}<span className="text-zinc-300">You will NOT be charged again.</span> No refund is issued for the current period.
         </p>
         <div className="flex gap-2">
           <button
@@ -78,7 +81,7 @@ function CancelModal({ periodEnd, busy, onConfirm, onCancel }: CancelModalProps)
             disabled={busy}
             className="flex-1 h-10 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
           >
-            {busy ? 'Cancelling…' : 'Cancel Subscription'}
+            {busy ? 'Cancelling…' : 'Yes, Cancel Renewal'}
           </button>
         </div>
       </div>
@@ -199,10 +202,11 @@ export default function BillingPage() {
   const [loadingInvoices,  setLoadingInvoices]  = useState(false)
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(null)
 
-  const [showCancel, setShowCancel] = useState(false)
-  const [cancelling, setCancelling] = useState(false)
-  const [showRefund, setShowRefund] = useState(false)
-  const [toast,      showToast]     = useToast()
+  const [showCancel,  setShowCancel]  = useState(false)
+  const [cancelling,  setCancelling]  = useState(false)
+  const [reactivating, setReactivating] = useState(false)
+  const [showRefund,  setShowRefund]  = useState(false)
+  const [toast,       showToast]      = useToast()
 
   const [checkoutLoading, setCheckoutLoading] = useState(false)
 
@@ -213,14 +217,23 @@ export default function BillingPage() {
       setUserId(user.id)
       setEmail(user.email ?? '')
 
-      const { data: prof } = await supabase
-        .from('profiles')
-        .select('subscription_cancel_at, purchased_first_sale')
-        .eq('id', user.id)
-        .single()
+      // Guard: columns may not exist if SQL migration hasn't run yet
+      try {
+        const { data: prof, error: profErr } = await supabase
+          .from('profiles')
+          .select('subscription_cancel_at, purchased_first_sale')
+          .eq('id', user.id)
+          .single()
 
-      setPlanCancelAt(prof?.subscription_cancel_at ?? null)
-      setPurchasedFirstSale(prof?.purchased_first_sale ?? false)
+        if (profErr) {
+          console.error('[billing] profile query error:', profErr.message)
+        } else {
+          setPlanCancelAt(prof?.subscription_cancel_at ?? null)
+          setPurchasedFirstSale(prof?.purchased_first_sale ?? false)
+        }
+      } catch (e) {
+        console.error('[billing] profile load error:', e)
+      }
       setLoading(false)
 
       // Load Stripe invoice + subscription data in background
@@ -230,6 +243,8 @@ export default function BillingPage() {
         const data = await res.json()
         if (data.invoices)     setInvoices(data.invoices)
         if (data.subscription) setSubscriptionInfo(data.subscription)
+      } catch (e) {
+        console.error('[billing] invoices load error:', e)
       } finally {
         setLoadingInvoices(false)
       }
@@ -248,9 +263,28 @@ export default function BillingPage() {
       }
       setPlanCancelAt(body.cancelAt)
       setShowCancel(false)
-      showToast('Subscription set to cancel at period end. You keep Pro access until then.', true)
+      showToast('Subscription cancelled. You keep Pro access until the end of the billing period.', true)
     } finally {
       setCancelling(false)
+    }
+  }
+
+  async function handleReactivate() {
+    setReactivating(true)
+    try {
+      const res  = await fetch('/api/user/reactivate-subscription', { method: 'POST' })
+      const body = await res.json()
+      if (!res.ok) {
+        showToast(body.error ?? 'Failed to reactivate', false)
+        return
+      }
+      setPlanCancelAt(null)
+      if (subscriptionInfo) {
+        setSubscriptionInfo({ ...subscriptionInfo, cancelAtPeriodEnd: false })
+      }
+      showToast('Subscription reactivated! You will continue to be billed normally.', true)
+    } finally {
+      setReactivating(false)
     }
   }
 
@@ -276,9 +310,10 @@ export default function BillingPage() {
     ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
     : 'bg-zinc-800 text-zinc-400 border-zinc-700'
 
-  const cancelAtDisplay  = planCancelAt       ? formatDate(planCancelAt)              : null
+  const cancelAtDisplay  = formatDate(planCancelAt)
   const periodEndDisplay = subscriptionInfo?.periodEnd ?? null
   const isCancelling     = !!planCancelAt || subscriptionInfo?.cancelAtPeriodEnd === true
+  const expiryDisplay    = cancelAtDisplay ?? periodEndDisplay
 
   return (
     <div className="p-8 max-w-xl">
@@ -311,12 +346,12 @@ export default function BillingPage() {
             )}
             {isPro && !isPrivileged && isCancelling && (
               <span className="text-sm text-zinc-400">
-                Cancels on <span className="text-white font-medium">{cancelAtDisplay ?? periodEndDisplay}</span>
+                Cancels on <span className="text-white font-medium">{expiryDisplay ?? '—'}</span>
               </span>
             )}
             {isPro && !isPrivileged && !isCancelling && periodEndDisplay && (
               <span className="text-sm text-zinc-400">
-                Renews <span className="text-zinc-200">{periodEndDisplay}</span>
+                Pro Plan — Renews on <span className="text-zinc-200">{periodEndDisplay}</span>
               </span>
             )}
             {!isPro && (
@@ -342,7 +377,7 @@ export default function BillingPage() {
                     <p className="text-xs text-zinc-500 mt-0.5">Unlimited access</p>
                   ) : isCancelling ? (
                     <p className="text-xs text-zinc-500 mt-0.5">
-                      Cancels on {cancelAtDisplay ?? periodEndDisplay ?? '—'}
+                      Cancels on {expiryDisplay ?? '—'}
                     </p>
                   ) : (
                     <p className="text-xs text-zinc-500 mt-0.5">
@@ -374,13 +409,36 @@ export default function BillingPage() {
           </h2>
 
           {isCancelling ? (
-            <div className="bg-yellow-400/5 border border-yellow-400/20 rounded-lg px-4 py-3 text-sm text-yellow-300 leading-relaxed">
-              Your subscription will cancel on{' '}
-              <span className="font-semibold">{cancelAtDisplay ?? periodEndDisplay ?? '—'}</span>.
-              You keep Pro access until then.
+            <div className="space-y-3">
+              {/* Warning banner */}
+              <div className="bg-yellow-400/5 border border-yellow-400/30 rounded-lg px-4 py-3 leading-relaxed">
+                <p className="text-sm text-yellow-300 font-medium mb-1">
+                  ⚠️ Your subscription has been cancelled.
+                </p>
+                <p className="text-xs text-yellow-300/70">
+                  You keep Pro access until{' '}
+                  <span className="font-semibold text-yellow-300">{expiryDisplay ?? '—'}</span>.
+                  After that, your account will switch to Free.
+                </p>
+              </div>
+
+              <button
+                onClick={handleReactivate}
+                disabled={reactivating}
+                className="w-full py-2.5 rounded-lg text-sm border border-yellow-400/40 text-yellow-400 hover:border-yellow-400/70 hover:text-yellow-300 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {reactivating ? 'Reactivating…' : 'Reactivate Subscription'}
+              </button>
+
+              <button
+                onClick={() => setShowRefund(true)}
+                className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer"
+              >
+                Request Refund
+              </button>
             </div>
           ) : (
-            <>
+            <div className="space-y-2">
               <button
                 onClick={() => setShowCancel(true)}
                 className="w-full py-2.5 rounded-lg text-sm border border-red-900/50 text-red-400 hover:border-red-700/60 hover:text-red-300 transition-colors cursor-pointer"
@@ -389,11 +447,11 @@ export default function BillingPage() {
               </button>
               <button
                 onClick={() => setShowRefund(true)}
-                className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer mt-2"
+                className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer"
               >
                 Request Refund
               </button>
-            </>
+            </div>
           )}
         </div>
       )}
