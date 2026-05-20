@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 interface UpgradeModalProps {
   onClose: () => void
 }
@@ -13,6 +15,23 @@ const FEATURES = [
 ]
 
 export default function UpgradeModal({ onClose }: UpgradeModalProps) {
+  const [loading, setLoading] = useState(false)
+
+  async function handleUpgrade() {
+    setLoading(true)
+    try {
+      const res  = await fetch('/api/stripe/create-checkout', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (err) {
+      console.error('Checkout error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
@@ -39,17 +58,21 @@ export default function UpgradeModal({ onClose }: UpgradeModalProps) {
           ))}
         </ul>
 
-        <p className="text-xs text-zinc-500 text-center mb-5">Message us on WhatsApp to upgrade your plan</p>
-
         <div className="flex flex-col gap-3">
-          <a
-            href="https://wa.me/258871252278?text=Quero+fazer+upgrade+para+o+plano+Pro+do+BlackHat+Swipe"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-lg transition-all flex items-center justify-center text-sm"
+          <button
+            onClick={handleUpgrade}
+            disabled={loading}
+            className="w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-bold rounded-lg transition-all flex items-center justify-center text-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Get Pro Access →
-          </a>
+            {loading ? (
+              <>
+                <span className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin mr-2" />
+                Redirecting…
+              </>
+            ) : (
+              'Get Pro Access →'
+            )}
+          </button>
           <button
             onClick={onClose}
             className="w-full h-11 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg transition-all text-sm cursor-pointer"

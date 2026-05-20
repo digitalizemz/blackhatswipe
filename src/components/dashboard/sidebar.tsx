@@ -5,7 +5,6 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { useUpgradeModal } from '@/lib/user-profile-context'
 import {
   LayoutGrid,
   Trophy,
@@ -86,9 +85,24 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps) {
-  const pathname   = usePathname()
-  const { show: showUpgrade } = useUpgradeModal()
-  const [collapsed, setCollapsed] = useState(false)
+  const pathname    = usePathname()
+  const [collapsed, setCollapsed]   = useState(false)
+  const [upgrading, setUpgrading]   = useState(false)
+
+  async function handleUpgrade() {
+    setUpgrading(true)
+    try {
+      const res  = await fetch('/api/stripe/create-checkout', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (err) {
+      console.error('Checkout error:', err)
+    } finally {
+      setUpgrading(false)
+    }
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem('sidebar-collapsed')
@@ -221,10 +235,11 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
                 Free
               </span>
               <button
-                onClick={showUpgrade}
-                className="text-xs text-yellow-400 hover:text-yellow-300 cursor-pointer transition-colors font-medium"
+                onClick={handleUpgrade}
+                disabled={upgrading}
+                className="text-xs text-yellow-400 hover:text-yellow-300 cursor-pointer transition-colors font-medium disabled:opacity-60"
               >
-                Upgrade →
+                {upgrading ? '…' : 'Upgrade →'}
               </button>
             </div>
           )}
