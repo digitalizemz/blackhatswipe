@@ -19,7 +19,7 @@ export async function POST(request: Request) {
   }
 
   const paymentIntent = await stripe.paymentIntents.create({
-    amount:           19700,
+    amount:           14700,
     currency:         'usd',
     customer:         customerId,
     payment_method:   paymentMethodId,
@@ -27,8 +27,9 @@ export async function POST(request: Request) {
     off_session:      true,
     description:      'First Sale in 24H — BlackHat Swipe Upsell',
     metadata: {
-      userId:  session.metadata?.userId ?? null,
-      product: 'first_sale_24h',
+      userId:   session.metadata?.userId ?? null,
+      product:  'first_sale_24h',
+      price_id: 'price_1TZ0FOR1aEdeMW7E58TloJAR',
     },
   })
 

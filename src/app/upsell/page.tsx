@@ -127,8 +127,9 @@ function UpsellContent() {
           {/* Price */}
           <div className="text-center mb-8">
             <p className="text-zinc-500 text-lg line-through mb-1">$497</p>
-            <p className="text-white text-3xl font-black">Just $197</p>
-            <p className="text-zinc-400 text-sm mt-1">One Time, Never Again</p>
+            <p className="text-yellow-400 text-4xl font-black mb-1">Just $147</p>
+            <p className="text-zinc-300 text-sm font-semibold">Today Only — One Time Payment</p>
+            <p className="text-green-400 text-sm mt-1 font-semibold">You save $350 today</p>
             <p className="text-red-400 text-xs mt-2 font-semibold">
               ⚠ This offer disappears when you close this page
             </p>
@@ -153,7 +154,7 @@ function UpsellContent() {
                 Processing…
               </>
             ) : (
-              'YES — Add First Sale in 24H for $197 →'
+              'YES — Add First Sale in 24H for $147 →'
             )}
           </button>
 
