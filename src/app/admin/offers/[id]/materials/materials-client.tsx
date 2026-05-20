@@ -30,7 +30,7 @@ const SCRAPE_STATUS_CLS: Record<string, string> = {
   no_url:   'text-zinc-500 bg-zinc-800 border-zinc-700',
 }
 
-const DEFAULT_FOLDERS = ['Ads', 'VSL', 'Checkout', 'Transcriptions']
+const DEFAULT_FOLDERS = ['VSL', 'Files & Docs']
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
