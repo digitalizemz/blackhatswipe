@@ -74,6 +74,14 @@ async function apiDeleteOfferFile(id: string): Promise<void> {
   await fetch(`/api/admin/materials/offer-files/${id}`, { method: 'DELETE' })
 }
 
+async function apiPatchOfferFile(id: string, updates: Record<string, unknown>): Promise<{ data: OfferFile | null; error: string | null }> {
+  const res  = await fetch(`/api/admin/materials/offer-files/${id}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates),
+  })
+  const json = await res.json()
+  return { data: (json.data as OfferFile) ?? null, error: json.error ?? null }
+}
+
 async function apiListAttachments(creativeId: string): Promise<CreativeAttachment[]> {
   const res  = await fetch(`/api/admin/materials/creative-attachments?creative_id=${creativeId}`)
   const json = await res.json()
@@ -769,6 +777,8 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   const [folders,       setFolders]       = useState<FolderState[]>([])
   const [newFolderName, setNewFolderName] = useState('')
   const [linkForms,     setLinkForms]     = useState<Record<string, LinkForm>>({})
+  const [renamingId,    setRenamingId]    = useState<string | null>(null)
+  const [renameValue,   setRenameValue]   = useState('')
 
   useEffect(() => {
     if (!offerId) return
@@ -967,6 +977,20 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
   async function deleteFile(fileId: string) {
     await apiDeleteOfferFile(fileId)
     setFiles(prev => prev.filter(f => f.id !== fileId))
+  }
+
+  function startRename(file: OfferFile) {
+    setRenamingId(file.id)
+    setRenameValue(file.file_name)
+  }
+
+  async function handleRename(fileId: string) {
+    const trimmed = renameValue.trim()
+    if (!trimmed) return
+    const { data: updated, error } = await apiPatchOfferFile(fileId, { file_name: trimmed })
+    if (error) { showToast(`Error: ${error}`); return }
+    if (updated) setFiles(prev => prev.map(f => f.id === fileId ? { ...f, file_name: trimmed } : f))
+    setRenamingId(null)
   }
 
   if (loading) {
@@ -1286,30 +1310,63 @@ export default function MaterialsClient({ offerId }: { offerId: string }) {
                           <p className="text-xs text-zinc-600">No files yet</p>
                         </div>
                       ) : (
-                        folderFiles.map(file => (
-                          <div key={file.id} className="flex items-center gap-3 p-3 border-t border-[#1A1A1A] hover:bg-[#111111] transition-colors">
-                            <span className="text-lg shrink-0">{getFileIcon(file.file_type, file.file_name)}</span>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-white truncate">{file.file_name}</p>
-                              {file.file_type === 'link' ? (
-                                <p className="text-xs text-zinc-600 truncate mt-0.5">{file.file_url}</p>
-                              ) : (
-                                <p className="text-xs text-zinc-500 mt-0.5">
-                                  {file.file_type && <span className="mr-2 uppercase">{file.file_type}</span>}
-                                  {file.file_size != null && <span>{(file.file_size / 1024).toFixed(0)} KB</span>}
-                                </p>
-                              )}
+                        folderFiles.map(file => {
+                          const isRenaming = renamingId === file.id
+                          return (
+                            <div key={file.id} className="flex items-center gap-3 p-3 border-t border-[#1A1A1A] hover:bg-[#111111] transition-colors">
+                              <span className="text-lg shrink-0">{getFileIcon(file.file_type, file.file_name)}</span>
+                              <div className="flex-1 min-w-0">
+                                {isRenaming ? (
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      autoFocus
+                                      value={renameValue}
+                                      onChange={e => setRenameValue(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') handleRename(file.id)
+                                        if (e.key === 'Escape') setRenamingId(null)
+                                      }}
+                                      className="bg-[#0D0D0D] border border-yellow-400/50 text-white text-sm rounded-md px-2 py-1 flex-1 focus:outline-none focus:ring-1 focus:ring-yellow-400/30 min-w-0"
+                                    />
+                                    <button onClick={() => handleRename(file.id)}
+                                      className="text-green-400 hover:text-green-300 cursor-pointer transition-colors text-sm leading-none shrink-0"
+                                      title="Save"
+                                    >✓</button>
+                                    <button onClick={() => setRenamingId(null)}
+                                      className="text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors text-sm leading-none shrink-0"
+                                      title="Cancel"
+                                    >✕</button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 group/name">
+                                    <p className="text-sm text-white truncate">{file.file_name}</p>
+                                    <button
+                                      onClick={() => startRename(file)}
+                                      className="text-zinc-600 hover:text-yellow-400 cursor-pointer transition-colors opacity-0 group-hover/name:opacity-100 shrink-0 text-xs leading-none"
+                                      title="Rename"
+                                    >✏</button>
+                                  </div>
+                                )}
+                                {file.file_type === 'link' ? (
+                                  <p className="text-xs text-zinc-600 truncate mt-0.5">{file.file_url}</p>
+                                ) : (
+                                  <p className="text-xs text-zinc-500 mt-0.5">
+                                    {file.file_type && <span className="mr-2 uppercase">{file.file_type}</span>}
+                                    {file.file_size != null && <span>{(file.file_size / 1024).toFixed(0)} KB</span>}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <a href={file.file_url} target="_blank" rel="noopener noreferrer"
+                                  className="text-xs text-zinc-400 hover:text-yellow-400 cursor-pointer transition-colors"
+                                >View →</a>
+                                <button onClick={() => deleteFile(file.id)}
+                                  className="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer text-xl leading-none"
+                                >×</button>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <a href={file.file_url} target="_blank" rel="noopener noreferrer"
-                                className="text-xs text-zinc-400 hover:text-yellow-400 cursor-pointer transition-colors"
-                              >View →</a>
-                              <button onClick={() => deleteFile(file.id)}
-                                className="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer text-xl leading-none"
-                              >×</button>
-                            </div>
-                          </div>
-                        ))
+                          )
+                        })
                       )}
                     </>
                   )}
