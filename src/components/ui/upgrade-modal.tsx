@@ -3,7 +3,9 @@
 import { useState } from 'react'
 
 interface UpgradeModalProps {
-  onClose: () => void
+  onClose:  () => void
+  title?:   string
+  body?:    string
 }
 
 const FEATURES = [
@@ -14,7 +16,7 @@ const FEATURES = [
   'Steal These section',
 ]
 
-export default function UpgradeModal({ onClose }: UpgradeModalProps) {
+export default function UpgradeModal({ onClose, title, body }: UpgradeModalProps) {
   const [loading, setLoading] = useState(false)
 
   async function handleUpgrade() {
@@ -32,6 +34,9 @@ export default function UpgradeModal({ onClose }: UpgradeModalProps) {
     }
   }
 
+  const heading  = title ?? 'Unlock Pro Access'
+  const subtitle = body  ?? 'Upgrade to Pro for full access to all offers, creatives, VSLs and performance data.'
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm px-4"
@@ -43,22 +48,22 @@ export default function UpgradeModal({ onClose }: UpgradeModalProps) {
           🔒
         </div>
 
-        <h2 className="text-xl font-bold text-white text-center mb-2">Unlock Pro Access</h2>
-        <p className="text-sm text-zinc-400 text-center mb-6">
-          Upgrade to Pro for full access to all offers, creatives, VSLs and performance data.
-        </p>
+        <h2 className="text-xl font-bold text-white text-center mb-2">{heading}</h2>
+        <p className="text-sm text-zinc-400 text-center mb-6">{subtitle}</p>
 
-        {/* Features */}
-        <ul className="space-y-2.5 mb-7">
-          {FEATURES.map((f) => (
-            <li key={f} className="flex items-center gap-2.5 text-sm text-zinc-300">
-              <span className="text-yellow-400 shrink-0">✓</span>
-              {f}
-            </li>
-          ))}
-        </ul>
+        {/* Features — only shown when using the default (no custom body) */}
+        {!body && (
+          <ul className="space-y-2.5 mb-7">
+            {FEATURES.map((f) => (
+              <li key={f} className="flex items-center gap-2.5 text-sm text-zinc-300">
+                <span className="text-yellow-400 shrink-0">✓</span>
+                {f}
+              </li>
+            ))}
+          </ul>
+        )}
 
-        <div className="flex flex-col gap-3">
+        <div className={!body ? 'flex flex-col gap-3' : 'flex flex-col gap-3 mt-2'}>
           <button
             onClick={handleUpgrade}
             disabled={loading}
