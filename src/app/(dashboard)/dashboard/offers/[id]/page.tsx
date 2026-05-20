@@ -14,6 +14,7 @@ import {
   extractYouTubeId,
   formatCurrency,
 } from '@/components/dashboard/creative-modal'
+import { saveToSwipeFile } from '@/app/actions/swipe'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -277,7 +278,9 @@ export default function OfferDetailPage() {
   const [creativeFilters,   setCreativeFilters]   = useState<Set<string>>(new Set())
   const [creativeSort,      setCreativeSort]      = useState<'views' | 'recent' | 'name'>('recent')
 
-  const [showReport, setShowReport] = useState(false)
+  const [showReport,   setShowReport]   = useState(false)
+  const [swipeSaved,   setSwipeSaved]   = useState(false)
+  const [swipeSaving,  setSwipeSaving]  = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -309,24 +312,45 @@ export default function OfferDetailPage() {
       })
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Check whether this offer is already in the user's swipe file once the page is accessible
+  useEffect(() => {
+    if (pageState !== 'accessible' || !id) return
+    async function checkSaved() {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase
+        .from('swipe_items')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('offer_id', id)
+        .maybeSingle()
+      if (data) setSwipeSaved(true)
+    }
+    checkSaved()
+  }, [id, pageState]) // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleSaveSwipe() {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setToast({ message: 'Please log in first', type: 'error' }); return }
-    const offerLinks: { name: string; url: string }[] = offer.links || []
-    const { error } = await supabase
-      .from('swipe_items')
-      .insert({
-        user_id:       user.id,
-        offer_id:      id,
-        title:         offer.title,
-        url:           `/dashboard/offers/${id}`,
-        thumbnail_url: offer.thumbnail_url ?? null,
-        niche:         offer.niches?.name ?? '',
-        notes:         '',
-      })
-    void offerLinks
-    if (error) setToast({ message: error.message, type: 'error' })
-    else       setToast({ message: 'Saved ✓', type: 'success' })
+    if (swipeSaved || swipeSaving) return
+    setSwipeSaving(true)
+    const result = await saveToSwipeFile({
+      offer_id:      id,
+      title:         offer.title,
+      url:           `/dashboard/offers/${id}`,
+      thumbnail_url: offer.thumbnail_url ?? undefined,
+      niche:         offer.niches?.name ?? '',
+    })
+    setSwipeSaving(false)
+    if (result.error) {
+      if (result.error === 'Offer already saved to swipe file') {
+        setSwipeSaved(true)
+        setToast({ message: 'Already in your swipe file', type: 'success' })
+      } else {
+        setToast({ message: result.error, type: 'error' })
+      }
+    } else {
+      setSwipeSaved(true)
+      setToast({ message: 'Saved to swipe file ✓', type: 'success' })
+    }
   }
 
   // ── Loading / locked / not found ───────────────────────────────────────────
@@ -739,9 +763,14 @@ export default function OfferDetailPage() {
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 space-y-2">
             <button
               onClick={handleSaveSwipe}
-              className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-semibold h-11 rounded-lg cursor-pointer transition-all text-sm flex items-center justify-center"
+              disabled={swipeSaved || swipeSaving}
+              className={`w-full font-semibold h-11 rounded-lg transition-all text-sm flex items-center justify-center ${
+                swipeSaved
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
+                  : 'bg-yellow-400 hover:bg-yellow-500 text-black cursor-pointer'
+              }`}
             >
-              ＋ Save to My Swipe
+              {swipeSaved ? 'Saved ✓' : swipeSaving ? 'Saving…' : '＋ Save to My Swipe'}
             </button>
             <button
               onClick={() => setShowReport(true)}
