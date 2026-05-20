@@ -1,11 +1,5 @@
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createAdminClient } from '@/lib/supabase/admin-client'
 import { requireAdmin } from '@/lib/supabase/require-admin'
-
-const admin = createSupabaseClient(
-  'https://lladxcxjmxtrsorvagql.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxsYWR4Y3hqbXh0cnNvcnZhZ3FsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTk3MzgwMCwiZXhwIjoyMDkxNTQ5ODAwfQ.I8lHnRarW-QL0iDv87ExYffLOZIhZ5Z1wmhJDtKIvIo',
-  { auth: { persistSession: false, autoRefreshToken: false } },
-)
 
 function sanitizeFileName(name: string): string {
   return name
@@ -28,6 +22,7 @@ export async function POST(request: Request) {
   const auth = await requireAdmin()
   if (auth.error) return Response.json({ error: auth.error }, { status: auth.status })
 
+  const admin  = createAdminClient()
   const form   = await request.formData()
   const file   = form.get('file') as File | null
   const bucket = form.get('bucket') as string | null

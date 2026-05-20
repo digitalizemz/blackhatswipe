@@ -150,12 +150,17 @@ export default function OfferWizard() {
       .replace(/-+/g, '-')
       .toLowerCase()
     const path = `thumbnails/${Date.now()}-${sanitizedName}`
-    const { data, error: err } = await supabase.storage.from('thumbnails').upload(path, file, { upsert: true })
-    if (!err && data) {
-      const { data: { publicUrl } } = supabase.storage.from('thumbnails').getPublicUrl(data.path)
-      setThumbnailUrl(publicUrl)
-    } else if (err) {
-      setToast({ message: err.message.includes('bucket') ? 'Storage not configured.' : err.message, type: 'error' })
+    const form = new FormData()
+    form.append('file', file)
+    form.append('bucket', 'thumbnails')
+    form.append('path', path)
+    const res = await fetch('/api/admin/materials/upload', { method: 'POST', body: form })
+    if (res.ok) {
+      const json = await res.json()
+      setThumbnailUrl(json.publicUrl)
+    } else {
+      const json = await res.json().catch(() => ({}))
+      setToast({ message: json.error ?? 'Upload failed', type: 'error' })
     }
     setThumbUploading(false)
   }
