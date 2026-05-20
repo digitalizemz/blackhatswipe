@@ -14,7 +14,7 @@ import {
   extractYouTubeId,
   formatCurrency,
 } from '@/components/dashboard/creative-modal'
-import { saveToSwipeFile } from '@/app/actions/swipe'
+import { saveToSwipeFile, removeFromSwipeFile } from '@/app/actions/swipe'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -278,9 +278,11 @@ export default function OfferDetailPage() {
   const [creativeFilters,   setCreativeFilters]   = useState<Set<string>>(new Set())
   const [creativeSort,      setCreativeSort]      = useState<'views' | 'recent' | 'name'>('recent')
 
-  const [showReport,   setShowReport]   = useState(false)
-  const [swipeSaved,   setSwipeSaved]   = useState(false)
-  const [swipeSaving,  setSwipeSaving]  = useState(false)
+  const [showReport,    setShowReport]    = useState(false)
+  const [swipeSaved,    setSwipeSaved]    = useState(false)
+  const [swipeSaving,   setSwipeSaving]   = useState(false)
+  const [swipeRemoving, setSwipeRemoving] = useState(false)
+  const [swipeNote,     setSwipeNote]     = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -320,11 +322,14 @@ export default function OfferDetailPage() {
       if (!user) return
       const { data } = await supabase
         .from('swipe_items')
-        .select('id')
+        .select('id, notes')
         .eq('user_id', user.id)
         .eq('offer_id', id)
         .maybeSingle()
-      if (data) setSwipeSaved(true)
+      if (data) {
+        setSwipeSaved(true)
+        setSwipeNote(data.notes ?? '')
+      }
     }
     checkSaved()
   }, [id, pageState]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -351,6 +356,30 @@ export default function OfferDetailPage() {
       setSwipeSaved(true)
       setToast({ message: 'Saved to swipe file ✓', type: 'success' })
     }
+  }
+
+  async function handleRemoveSwipe() {
+    if (!swipeSaved || swipeRemoving) return
+    setSwipeRemoving(true)
+    const result = await removeFromSwipeFile(id)
+    setSwipeRemoving(false)
+    if (result.error) {
+      setToast({ message: result.error, type: 'error' })
+    } else {
+      setSwipeSaved(false)
+      setSwipeNote('')
+      setToast({ message: 'Removed from swipe file', type: 'success' })
+    }
+  }
+
+  async function handleNoteBlur() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase
+      .from('swipe_items')
+      .update({ notes: swipeNote.trim() || null })
+      .eq('user_id', user.id)
+      .eq('offer_id', id)
   }
 
   // ── Loading / locked / not found ───────────────────────────────────────────
@@ -761,17 +790,38 @@ export default function OfferDetailPage() {
 
           {/* Actions */}
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 space-y-2">
-            <button
-              onClick={handleSaveSwipe}
-              disabled={swipeSaved || swipeSaving}
-              className={`w-full font-semibold h-11 rounded-lg transition-all text-sm flex items-center justify-center ${
-                swipeSaved
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/30 cursor-default'
-                  : 'bg-yellow-400 hover:bg-yellow-500 text-black cursor-pointer'
-              }`}
-            >
-              {swipeSaved ? 'Saved ✓' : swipeSaving ? 'Saving…' : '＋ Save to My Swipe'}
-            </button>
+            {swipeSaved ? (
+              <>
+                <div className="flex gap-2">
+                  <div className="flex-1 bg-green-500/20 text-green-400 border border-green-500/30 h-11 rounded-lg text-sm flex items-center justify-center font-semibold select-none">
+                    Saved ✓
+                  </div>
+                  <button
+                    onClick={handleRemoveSwipe}
+                    disabled={swipeRemoving}
+                    className="border border-zinc-700 text-zinc-400 hover:border-red-500/50 hover:text-red-400 h-11 px-4 rounded-lg text-sm cursor-pointer transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    {swipeRemoving ? '…' : 'Remove ×'}
+                  </button>
+                </div>
+                <textarea
+                  value={swipeNote}
+                  onChange={e => setSwipeNote(e.target.value)}
+                  onBlur={handleNoteBlur}
+                  placeholder="📝 Add a note..."
+                  rows={3}
+                  className="w-full bg-[#111111] border border-[#1C1C1C] text-white text-sm rounded-lg px-3 py-2.5 placeholder:text-zinc-600 focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/20 resize-none transition-colors"
+                />
+              </>
+            ) : (
+              <button
+                onClick={handleSaveSwipe}
+                disabled={swipeSaving}
+                className="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-semibold h-11 rounded-lg cursor-pointer transition-all text-sm flex items-center justify-center"
+              >
+                {swipeSaving ? 'Saving…' : '＋ Save to My Swipe'}
+              </button>
+            )}
             <button
               onClick={() => setShowReport(true)}
               className="w-full border border-red-900/50 text-red-400 text-sm rounded-lg py-2.5 hover:bg-red-900/20 transition cursor-pointer"

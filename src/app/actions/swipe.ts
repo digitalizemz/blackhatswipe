@@ -44,6 +44,23 @@ export async function saveToSwipeFile(data: {
 }
 
 
+export async function removeFromSwipeFile(offerId: string): Promise<{ error?: string; success?: boolean }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Unauthorized' }
+
+  const { error } = await supabase
+    .from('swipe_items')
+    .delete()
+    .eq('user_id', user.id)
+    .eq('offer_id', offerId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/dashboard/swipe-file')
+  return { success: true }
+}
+
+
 export async function deleteSwipeItem(id: string): Promise<{ error?: string }> {
   const supabase = await createClient()
   const {
