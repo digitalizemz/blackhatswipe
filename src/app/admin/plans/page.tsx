@@ -444,11 +444,13 @@ export default function AdminPlansPage() {
                         isPrivileged ? (
                           <span className="text-xs text-blue-400">Unlimited</span>
                         ) : user.pro_expires_at ? (
-                          <span className={`text-xs ${isExpired ? 'text-red-400' : 'text-zinc-300'}`}>
-                            {isExpired ? '⚠ ' : ''}{formatDate(user.pro_expires_at)}
-                          </span>
+                          isExpired ? (
+                            <span className="text-xs text-red-400 font-medium">Expired</span>
+                          ) : (
+                            <span className="text-xs text-zinc-300">{formatDate(user.pro_expires_at)}</span>
+                          )
                         ) : (
-                          <span className="text-xs text-zinc-500">Never</span>
+                          <span className="text-xs text-amber-400" title="Pro granted without expiry — no duration set">Unlimited ⚠</span>
                         )
                       ) : (
                         <span className="text-xs text-zinc-600">—</span>

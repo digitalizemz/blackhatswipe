@@ -16,13 +16,13 @@ export default async function DashboardLayout({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }))
 
-  let profile: { plan: string; role: string; full_name: string | null } | null = null
+  let profile: { plan: string; role: string; full_name: string | null; pro_expires_at?: string | null } | null = null
   if (user) {
     try {
       const adminClient = createAdminClient()
       const { data, error: profileError } = await adminClient
         .from('profiles')
-        .select('plan, role, full_name')
+        .select('plan, role, full_name, pro_expires_at')
         .eq('id', user.id)
         .single()
       if (profileError) {
@@ -36,8 +36,18 @@ export default async function DashboardLayout({
   }
 
   const isSuperAdmin = user?.id === SUPER_ADMIN_ID
-  const plan = isSuperAdmin ? 'pro'   : (profile?.plan ?? 'free')
-  const role = isSuperAdmin ? 'admin' : (profile?.role ?? 'user')
+  const rawPlan = isSuperAdmin ? 'pro'   : (profile?.plan ?? 'free')
+  const role    = isSuperAdmin ? 'admin' : (profile?.role ?? 'user')
+
+  // If pro_expires_at is in the past, treat the plan as free (enforcement without DB write)
+  const isExpiredPro =
+    rawPlan === 'pro' &&
+    role !== 'admin' &&
+    role !== 'editor' &&
+    !!profile?.pro_expires_at &&
+    new Date(profile.pro_expires_at) < new Date()
+
+  const plan = isExpiredPro ? 'free' : rawPlan
 
   const isFree =
     plan !== 'pro' &&

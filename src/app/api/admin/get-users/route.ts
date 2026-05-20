@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data: profiles } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, phone, role, plan')
+    .select('id, full_name, phone, role, plan, plan_changed_at, plan_changed_by, pro_expires_at')
 
   const profileMap = new Map((profiles ?? []).map(p => [p.id, p]))
 
@@ -23,13 +23,16 @@ export async function GET() {
     .map(authUser => {
       const p = profileMap.get(authUser.id)
       return {
-        id:         authUser.id,
-        email:      authUser.email ?? null,
-        full_name:  p?.full_name ?? null,
-        phone:      p?.phone     ?? null,
-        role:       p?.role      ?? 'user',
-        plan:       p?.plan      ?? 'free',
-        created_at: authUser.created_at,
+        id:              authUser.id,
+        email:           authUser.email           ?? null,
+        full_name:       p?.full_name             ?? null,
+        phone:           p?.phone                 ?? null,
+        role:            p?.role                  ?? 'user',
+        plan:            p?.plan                  ?? 'free',
+        plan_changed_at: p?.plan_changed_at       ?? null,
+        plan_changed_by: p?.plan_changed_by       ?? null,
+        pro_expires_at:  p?.pro_expires_at        ?? null,
+        created_at:      authUser.created_at,
       }
     })
     .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
