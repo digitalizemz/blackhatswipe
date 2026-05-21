@@ -22,7 +22,8 @@ export async function POST() {
     }
 
     if (!profile?.stripe_subscription_id) {
-      return NextResponse.json({ error: 'No active subscription found' }, { status: 400 })
+      // Plan was set manually by admin — nothing to cancel in Stripe
+      return NextResponse.json({ success: true, message: 'no_stripe_subscription', cancelAt: null })
     }
 
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)

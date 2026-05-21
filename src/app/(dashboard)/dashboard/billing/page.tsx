@@ -209,11 +209,12 @@ export default function BillingPage() {
   const [toast,       showToast]      = useToast()
 
   const [checkoutLoading, setCheckoutLoading] = useState(false)
+  const [statusMessage,   setStatusMessage]   = useState<string | null>(null)
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user) { setLoading(false); return }
       setUserId(user.id)
       setEmail(user.email ?? '')
 
@@ -256,14 +257,20 @@ export default function BillingPage() {
     setCancelling(true)
     try {
       const res  = await fetch('/api/user/cancel-subscription', { method: 'POST' })
-      const body = await res.json()
-      if (!res.ok) {
-        showToast(body.error ?? 'Failed to cancel', false)
-        return
+      const data = await res.json()
+      setShowCancel(false) // always close modal first
+
+      if (data.message === 'no_stripe_subscription') {
+        setStatusMessage('Your plan is managed manually. Contact support to cancel: wa.me/258871252278')
+      } else if (data.cancelAt) {
+        setPlanCancelAt(data.cancelAt)
+        showToast('Subscription cancelled. You keep Pro access until the end of the billing period.', true)
+      } else if (!res.ok) {
+        showToast(data.error ?? 'Failed to cancel', false)
       }
-      setPlanCancelAt(body.cancelAt)
+    } catch {
       setShowCancel(false)
-      showToast('Subscription cancelled. You keep Pro access until the end of the billing period.', true)
+      showToast('Something went wrong. Please try again.', false)
     } finally {
       setCancelling(false)
     }
@@ -327,6 +334,13 @@ export default function BillingPage() {
             : 'bg-red-500/10 text-red-400 border-red-500/20'
         }`}>
           {toast.msg}
+        </div>
+      )}
+
+      {/* Status message (e.g. manual plan — contact support) */}
+      {statusMessage && (
+        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-zinc-800/60 border border-zinc-700 text-zinc-300 leading-relaxed">
+          {statusMessage}
         </div>
       )}
 
