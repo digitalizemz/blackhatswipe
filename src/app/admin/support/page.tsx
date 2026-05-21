@@ -50,7 +50,10 @@ export default function AdminSupportPage() {
     closed:      tickets.filter(t => t.status === 'closed').length,
   }
 
-  const displayed = tab === 'all' ? tickets : tickets.filter(t => t.status === tab)
+  const isRefundTicket = (t: Ticket) => t.subject.toLowerCase().startsWith('[refund]')
+
+  const displayed = (tab === 'all' ? tickets : tickets.filter(t => t.status === tab))
+    .sort((a, b) => Number(isRefundTicket(b)) - Number(isRefundTicket(a)))
 
   const tabs: { key: TabFilter; label: string }[] = [
     { key: 'all',         label: `All (${counts.all})`                   },
@@ -138,7 +141,7 @@ export default function AdminSupportPage() {
                   <td className="px-5 py-3.5 max-w-[220px]">
                     <div className="flex items-center gap-2 min-w-0">
                       <p className="text-white font-medium truncate">{ticket.subject}</p>
-                      {ticket.category === 'Billing Issue' && ticket.subject.toLowerCase().includes('refund') && (
+                      {isRefundTicket(ticket) && (
                         <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 uppercase tracking-wide">
                           Refund
                         </span>

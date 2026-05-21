@@ -398,7 +398,7 @@ export default function BillingPage() {
                   {reactivating ? 'Reactivating…' : 'Reactivate Subscription'}
                 </button>
                 <Link
-                  href="/dashboard/support?type=refund"
+                  href="/dashboard/support"
                   className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors flex items-center justify-center"
                 >
                   Support &amp; Refund →
@@ -413,7 +413,7 @@ export default function BillingPage() {
                   Cancel Subscription
                 </button>
                 <Link
-                  href="/dashboard/support?type=refund"
+                  href="/dashboard/support"
                   className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors flex items-center justify-center"
                 >
                   Support &amp; Refund →

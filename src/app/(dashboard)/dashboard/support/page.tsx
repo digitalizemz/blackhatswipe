@@ -31,29 +31,36 @@ interface Ticket {
   status: string; assigned_name: string | null; updated_at: string; created_at: string
 }
 
-const REFUND_REASONS = ['Not what I expected', 'Technical issues', 'Duplicate charge', 'Other']
+const REFUND_REASONS = [
+  'Not what I expected',
+  'Technical issues',
+  'Duplicate charge',
+  'Did not use the service',
+  'Other',
+]
 
 // ── New Ticket Modal ──────────────────────────────────────────────────────────
 
 interface NewTicketModalProps {
-  onClose:          () => void
-  onCreated:        (ticket: Ticket) => void
-  initialCategory?: string
-  initialSubject?:  string
-  initialPriority?: 'normal' | 'urgent'
+  onClose:   () => void
+  onCreated: (ticket: Ticket) => void
 }
 
-function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, initialPriority }: NewTicketModalProps) {
-  const [subject,      setSubject]      = useState(initialSubject  ?? '')
-  const [category,     setCategory]     = useState(initialCategory ?? CATEGORIES[0])
-  const [priority,     setPriority]     = useState<'normal' | 'urgent'>(initialPriority ?? 'normal')
+function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
+  const [subject,      setSubject]      = useState('')
+  const [category,     setCategory]     = useState(CATEGORIES[0])
+  const [priority,     setPriority]     = useState<'normal' | 'urgent'>('normal')
+  const [isRefund,     setIsRefund]     = useState(false)
   const [refundReason, setRefundReason] = useState(REFUND_REASONS[0])
   const [description,  setDescription]  = useState('')
   const [submitting,   setSubmitting]   = useState(false)
   const [error,        setError]        = useState('')
   const [senderName,   setSenderName]   = useState('')
 
-  const isRefundTicket = category === 'Billing Issue' && subject.toLowerCase().includes('refund')
+  // Clear refund flag when leaving Billing Issue category
+  useEffect(() => {
+    if (category !== 'Billing Issue') setIsRefund(false)
+  }, [category])
 
   const supabase = createClient()
   useEffect(() => {
@@ -67,14 +74,15 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
     if (!description.trim()) { setError('Description is required'); return }
     setSubmitting(true); setError('')
     try {
-      const fullDescription = isRefundTicket
+      const effectiveSubject  = isRefund ? `[REFUND] ${subject.trim()}` : subject.trim()
+      const effectivePriority = isRefund ? 'urgent' : priority
+      const fullDescription   = isRefund
         ? `Refund reason: ${refundReason}\n\n${description}`
         : description
-      const effectivePriority = isRefundTicket ? 'urgent' : priority
       const res  = await fetch('/api/support/tickets', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ subject, category, priority: effectivePriority, description: fullDescription, sender_name: senderName }),
+        body:    JSON.stringify({ subject: effectiveSubject, category, priority: effectivePriority, description: fullDescription, sender_name: senderName }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'Failed to create ticket'); return }
@@ -90,17 +98,9 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl p-6 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-white">
-            {isRefundTicket ? '💸 Request Refund' : 'Open New Ticket'}
-          </h2>
+          <h2 className="text-base font-bold text-white">Open New Ticket</h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none cursor-pointer">×</button>
         </div>
-
-        {isRefundTicket && (
-          <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
-            Refund requests are reviewed within 3–5 business days. Marked urgent automatically.
-          </p>
-        )}
 
         <div className="space-y-4">
           <div>
@@ -122,14 +122,14 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
                   <button
                     key={p}
                     type="button"
-                    onClick={() => !isRefundTicket && setPriority(p)}
+                    onClick={() => !isRefund && setPriority(p)}
                     className={`flex-1 text-sm font-medium transition-all capitalize ${
-                      (isRefundTicket ? p === 'urgent' : priority === p)
+                      (isRefund ? p === 'urgent' : priority === p)
                         ? p === 'urgent'
                           ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                           : 'bg-yellow-400/10 text-yellow-400'
                         : 'bg-[#111111] text-zinc-500 hover:text-zinc-300'
-                    } ${isRefundTicket ? 'cursor-default' : 'cursor-pointer'}`}
+                    } ${isRefund ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     {p}
                   </button>
@@ -138,13 +138,32 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
             </div>
           </div>
 
-          {isRefundTicket && (
-            <div>
-              <label className="text-sm text-zinc-300 mb-1.5 block">Refund Reason</label>
-              <select value={refundReason} onChange={e => setRefundReason(e.target.value)} className={`${inputCls} h-11 cursor-pointer`}>
-                {REFUND_REASONS.map(r => <option key={r}>{r}</option>)}
-              </select>
-            </div>
+          {/* Refund checkbox — only visible when Billing Issue is selected */}
+          {category === 'Billing Issue' && (
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isRefund}
+                onChange={e => setIsRefund(e.target.checked)}
+                className="w-4 h-4 rounded border-zinc-600 bg-[#111111] accent-yellow-400 cursor-pointer"
+              />
+              <span className="text-sm text-zinc-300">This is a refund request</span>
+            </label>
+          )}
+
+          {/* Refund reason + note — only when refund checkbox is checked */}
+          {isRefund && (
+            <>
+              <div>
+                <label className="text-sm text-zinc-300 mb-1.5 block">Refund Reason</label>
+                <select value={refundReason} onChange={e => setRefundReason(e.target.value)} className={`${inputCls} h-11 cursor-pointer`}>
+                  {REFUND_REASONS.map(r => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+              <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-lg px-4 py-3 text-xs text-zinc-400 leading-relaxed">
+                Refund requests are reviewed within 3–5 business days. We recommend first contacting support — most issues can be resolved quickly.
+              </div>
+            </>
           )}
 
           <div>
@@ -152,7 +171,7 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder={isRefundTicket ? 'Describe why you are requesting a refund…' : 'Describe your issue in detail…'}
+              placeholder={isRefund ? 'Describe why you are requesting a refund…' : 'Describe your issue in detail…'}
               rows={4}
               className={`${inputCls} py-3 resize-none`}
               style={{ minHeight: 100 }}
@@ -168,7 +187,7 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
             disabled={submitting}
             className="flex-1 h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
           >
-            {submitting ? 'Opening…' : isRefundTicket ? 'Submit Refund Request' : 'Open Ticket'}
+            {submitting ? 'Opening…' : isRefund ? 'Submit Refund Request' : 'Open Ticket'}
           </button>
           <button onClick={onClose} className="flex-1 h-11 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-sm cursor-pointer transition-colors">
             Cancel
@@ -181,15 +200,12 @@ function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, i
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type ModalDefaults = { category?: string; subject?: string; priority?: 'normal' | 'urgent' } | null
-
 export default function SupportPage() {
-  const [tickets,       setTickets]       = useState<Ticket[]>([])
-  const [loading,       setLoading]       = useState(true)
-  const [fetchError,    setFetchError]    = useState<string | null>(null)
-  const [showModal,     setShowModal]     = useState(false)
-  const [modalDefaults, setModalDefaults] = useState<ModalDefaults>(null)
-  const [successMsg,    setSuccessMsg]    = useState('')
+  const [tickets,    setTickets]    = useState<Ticket[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [showModal,  setShowModal]  = useState(false)
+  const [successMsg, setSuccessMsg] = useState('')
   const successTimer = useRef<ReturnType<typeof setTimeout>>()
 
   async function loadTickets() {
@@ -206,14 +222,7 @@ export default function SupportPage() {
     }
   }
 
-  useEffect(() => {
-    loadTickets()
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('type') === 'refund') {
-      setModalDefaults({ category: 'Billing Issue', subject: 'Refund Request', priority: 'urgent' })
-      setShowModal(true)
-    }
-  }, [])
+  useEffect(() => { loadTickets() }, [])
 
   function handleCreated(ticket: Ticket) {
     setShowModal(false)
@@ -316,11 +325,8 @@ export default function SupportPage() {
 
       {showModal && (
         <NewTicketModal
-          onClose={() => { setShowModal(false); setModalDefaults(null) }}
+          onClose={() => setShowModal(false)}
           onCreated={handleCreated}
-          initialCategory={modalDefaults?.category}
-          initialSubject={modalDefaults?.subject}
-          initialPriority={modalDefaults?.priority}
         />
       )}
     </div>
