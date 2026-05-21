@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { useUserProfile } from '@/lib/user-profile-context'
 
@@ -46,6 +47,7 @@ export default function SettingsPage() {
   const [originalEmail, setOriginalEmail] = useState('')
   const [fullName,      setFullName]      = useState('')
   const [phone,         setPhone]         = useState('')
+  const [memberSince,   setMemberSince]   = useState<string | null>(null)
   const [proExpiresAt,  setProExpiresAt]  = useState<string | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
   const [profileToast,  showProfileToast] = useToast()
@@ -55,8 +57,6 @@ export default function SettingsPage() {
   const [savingPw,  setSavingPw]  = useState(false)
   const [pwToast,   showPwToast]  = useToast()
 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -64,6 +64,7 @@ export default function SettingsPage() {
       setUserId(user.id)
       setEmail(user.email ?? '')
       setOriginalEmail(user.email ?? '')
+      setMemberSince(user.created_at ?? null)
 
       const { data: prof } = await supabase
         .from('profiles')
@@ -124,146 +125,154 @@ export default function SettingsPage() {
     : 'bg-zinc-800 text-zinc-400 border-zinc-700'
 
   return (
-    <div className="p-8 max-w-xl">
+    <div className="p-8">
       <h1 className="text-2xl font-bold text-white mb-6">Settings</h1>
 
-      {/* ── Account ── */}
-      <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">Account</h2>
-        <div className="space-y-4">
-          <div>
-            <label className={labelCls}>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className={inputCls}
-              placeholder="you@example.com"
-            />
-            <p className="text-xs text-zinc-500 mt-1">Changing email requires re-confirmation</p>
-          </div>
-          <div>
-            <label className={labelCls}>Full Name</label>
-            <input
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              className={inputCls}
-              placeholder="Your full name"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Phone</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              className={inputCls}
-              placeholder="+1 234 567 890"
-            />
-          </div>
-        </div>
-        <ToastBar toast={profileToast} />
-        <button
-          onClick={saveProfile}
-          disabled={savingProfile}
-          className="mt-5 w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
-        >
-          {savingProfile ? 'Saving…' : 'Save Changes'}
-        </button>
-      </div>
+      {/* Two-column grid */}
+      <div className="grid grid-cols-5 gap-6">
 
-      {/* ── Password ── */}
-      <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4" id="password">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">🔒 Password</h2>
-        <div className="space-y-4">
-          <div>
-            <label className={labelCls}>New Password</label>
-            <input
-              type="password"
-              value={newPw}
-              onChange={e => setNewPw(e.target.value)}
-              className={inputCls}
-              placeholder="Min. 6 characters"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Confirm New Password</label>
-            <input
-              type="password"
-              value={confirmPw}
-              onChange={e => setConfirmPw(e.target.value)}
-              className={inputCls}
-              placeholder="Repeat new password"
-            />
-          </div>
-        </div>
-        <ToastBar toast={pwToast} />
-        <button
-          onClick={updatePassword}
-          disabled={savingPw}
-          className="mt-5 w-full h-11 bg-[#111111] border border-[#1A1A1A] hover:border-zinc-600 text-white font-medium rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
-        >
-          {savingPw ? 'Updating…' : 'Update Password'}
-        </button>
-      </div>
+        {/* Left col — Account + Password (3fr) */}
+        <div className="col-span-3 space-y-4">
 
-      {/* ── Plan ── */}
-      <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">Plan</h2>
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${planCls}`}>
-            {planLabel}
-          </span>
-          {isPro && isPrivileged && (
-            <span className="text-xs text-zinc-500">Unlimited access</span>
-          )}
-          {isPro && !isPrivileged && proExpiresAt && (
-            <span className="text-xs text-zinc-500">
-              Expires{' '}
-              {new Date(proExpiresAt).toLocaleDateString('en-US', {
-                month: 'short', day: 'numeric', year: 'numeric',
-              })}
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-zinc-600 mt-3">Plan changes are managed by your admin.</p>
-      </div>
+          {/* Account */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">Account</h2>
+            <div className="space-y-4">
+              <div>
+                <label className={labelCls}>Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className={inputCls}
+                  placeholder="you@example.com"
+                />
+                <p className="text-xs text-zinc-500 mt-1">Changing email requires re-confirmation</p>
+              </div>
+              <div>
+                <label className={labelCls}>Full Name</label>
+                <input
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  className={inputCls}
+                  placeholder="Your full name"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Phone</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  className={inputCls}
+                  placeholder="+1 234 567 890"
+                />
+              </div>
+            </div>
+            <ToastBar toast={profileToast} />
+            <button
+              onClick={saveProfile}
+              disabled={savingProfile}
+              className="mt-5 w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
+            >
+              {savingProfile ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
 
-      {/* ── Danger Zone ── */}
-      <div className="bg-[#0D0D0D] border border-red-500/10 rounded-xl p-6">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-red-500/70 mb-4">
-          Danger Zone
-        </h2>
-        {!showDeleteConfirm ? (
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="h-10 px-4 border border-red-400/20 text-red-400 hover:border-red-400/40 hover:text-red-300 rounded-lg text-sm cursor-pointer transition-all"
-          >
-            Delete Account
-          </button>
-        ) : (
-          <div className="p-3 bg-red-900/10 border border-red-500/20 rounded-lg">
-            <p className="text-sm text-red-400 mb-3">Are you sure? This cannot be undone.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 h-9 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-xs cursor-pointer transition-colors"
+          {/* Password */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6" id="password">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">🔒 Password</h2>
+            <div className="space-y-4">
+              <div>
+                <label className={labelCls}>New Password</label>
+                <input
+                  type="password"
+                  value={newPw}
+                  onChange={e => setNewPw(e.target.value)}
+                  className={inputCls}
+                  placeholder="Min. 6 characters"
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPw}
+                  onChange={e => setConfirmPw(e.target.value)}
+                  className={inputCls}
+                  placeholder="Repeat new password"
+                />
+              </div>
+            </div>
+            <ToastBar toast={pwToast} />
+            <button
+              onClick={updatePassword}
+              disabled={savingPw}
+              className="mt-5 w-full h-11 bg-[#111111] border border-[#1A1A1A] hover:border-zinc-600 text-white font-medium rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
+            >
+              {savingPw ? 'Updating…' : 'Update Password'}
+            </button>
+          </div>
+
+        </div>
+
+        {/* Right col — Account Info + Danger Zone (2fr) */}
+        <div className="col-span-2 space-y-4">
+
+          {/* Account Info */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">Account Info</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-zinc-500">Plan</span>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${planCls}`}>
+                  {planLabel}
+                </span>
+              </div>
+              {isPro && !isPrivileged && proExpiresAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Expires</span>
+                  <span className="text-xs text-zinc-400">
+                    {new Date(proExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+              {memberSince && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Member since</span>
+                  <span className="text-xs text-zinc-400">
+                    {new Date(memberSince).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="mt-4 pt-4 border-t border-[#1A1A1A]">
+              <Link
+                href="/dashboard/billing"
+                className="text-sm text-yellow-400 hover:text-yellow-300 font-medium transition-colors"
               >
-                Cancel
-              </button>
-              <a
-                href="mailto:support@blackhatswipe.com?subject=Delete my account"
-                className="flex-1 h-9 flex items-center justify-center border border-red-400/40 text-red-400 hover:text-red-300 hover:border-red-400/60 rounded-lg text-xs transition-colors"
-              >
-                Contact support to delete
-              </a>
+                Manage Billing →
+              </Link>
             </div>
           </div>
-        )}
-        <p className="text-xs text-zinc-600 mt-3">
-          To delete your account, contact{' '}
-          <span className="text-zinc-500">support@blackhatswipe.com</span>
-        </p>
+
+          {/* Danger Zone */}
+          <div className="bg-[#0D0D0D] border border-red-500/10 rounded-xl p-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-red-500/70 mb-3">
+              Danger Zone
+            </h3>
+            <p className="text-xs text-zinc-500 mb-4">
+              To delete your account, contact our support team. Account deletion is permanent and cannot be undone.
+            </p>
+            <a
+              href="mailto:support@blackhatswipe.com?subject=Delete my account"
+              className="inline-flex items-center text-sm text-red-400 hover:text-red-300 font-medium transition-colors"
+            >
+              Contact support to delete account →
+            </a>
+          </div>
+
+        </div>
       </div>
     </div>
   )

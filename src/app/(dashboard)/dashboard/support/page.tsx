@@ -42,12 +42,13 @@ const REFUND_REASONS = [
 // ── New Ticket Modal ──────────────────────────────────────────────────────────
 
 interface NewTicketModalProps {
-  onClose:   () => void
-  onCreated: (ticket: Ticket) => void
+  onClose:        () => void
+  onCreated:      (ticket: Ticket) => void
+  initialSubject?: string
 }
 
-function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
-  const [subject,      setSubject]      = useState('')
+function NewTicketModal({ onClose, onCreated, initialSubject }: NewTicketModalProps) {
+  const [subject,      setSubject]      = useState(initialSubject ?? '')
   const [category,     setCategory]     = useState(CATEGORIES[0])
   const [priority,     setPriority]     = useState<'normal' | 'urgent'>('normal')
   const [isRefund,     setIsRefund]     = useState(false)
@@ -200,11 +201,19 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+const COMMON_ISSUES = [
+  { label: 'How do I upgrade to Pro?',          subject: 'Upgrade to Pro question'    },
+  { label: 'I was charged incorrectly',          subject: 'Incorrect charge'           },
+  { label: 'I can\'t access my content',         subject: 'Cannot access content'      },
+  { label: 'I want to cancel my subscription',   subject: 'Cancel subscription'        },
+]
+
 export default function SupportPage() {
   const [tickets,    setTickets]    = useState<Ticket[]>([])
   const [loading,    setLoading]    = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [showModal,  setShowModal]  = useState(false)
+  const [modalSubject, setModalSubject] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const successTimer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -224,6 +233,11 @@ export default function SupportPage() {
 
   useEffect(() => { loadTickets() }, [])
 
+  function openModal(subject = '') {
+    setModalSubject(subject)
+    setShowModal(true)
+  }
+
   function handleCreated(ticket: Ticket) {
     setShowModal(false)
     setTickets(prev => [ticket, ...prev])
@@ -240,30 +254,19 @@ export default function SupportPage() {
   )
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-8">
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">🎫 Support</h1>
+          <h1 className="text-2xl font-bold text-white mb-1">Support</h1>
           <p className="text-sm text-zinc-500">Open a ticket and we&apos;ll get back to you</p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* WhatsApp */}
-          <a
-            href="https://wa.me/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 text-sm font-medium transition-colors cursor-pointer"
-          >
-            💬 Live Support via WhatsApp
-          </a>
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-5 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-xl text-sm cursor-pointer transition-all"
-          >
-            + Open New Ticket
-          </button>
-        </div>
+        <button
+          onClick={() => openModal()}
+          className="px-5 py-2.5 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-xl text-sm cursor-pointer transition-all"
+        >
+          + Open New Ticket
+        </button>
       </div>
 
       {successMsg && (
@@ -272,61 +275,114 @@ export default function SupportPage() {
         </div>
       )}
 
-      {/* Ticket list */}
-      {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 animate-pulse">
-              <div className="h-4 bg-zinc-800 rounded w-48 mb-2" />
-              <div className="h-3 bg-zinc-800 rounded w-32" />
+      {/* Two-column grid */}
+      <div className="grid grid-cols-5 gap-6">
+
+        {/* Left — ticket list (3fr) */}
+        <div className="col-span-3">
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 animate-pulse">
+                  <div className="h-4 bg-zinc-800 rounded w-48 mb-2" />
+                  <div className="h-3 bg-zinc-800 rounded w-32" />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ) : tickets.length === 0 ? (
-        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-10 text-center">
-          <p className="text-zinc-600 text-sm">No tickets yet. Open one above if you need help.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {tickets.map(ticket => (
-            <div key={ticket.id} className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 hover:border-zinc-700 transition-colors">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-white mb-1.5 truncate">{ticket.subject}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-zinc-600 bg-zinc-800/50 px-2 py-0.5 rounded-md">{ticket.category}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_BADGE[ticket.status] ?? STATUS_BADGE.open}`}>
-                      {STATUS_LABEL[ticket.status] ?? ticket.status}
-                    </span>
-                    {ticket.priority === 'urgent' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full border bg-red-500/10 text-red-400 border-red-500/20">
-                        🔴 Urgent
-                      </span>
-                    )}
-                    {ticket.assigned_name && (
-                      <span className="text-xs text-zinc-500">Being handled by {ticket.assigned_name}</span>
-                    )}
+          ) : tickets.length === 0 ? (
+            <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-10 text-center">
+              <p className="text-zinc-600 text-sm">No tickets yet. Open one if you need help.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {tickets.map(ticket => (
+                <div key={ticket.id} className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-4 hover:border-zinc-700 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white mb-1.5 truncate">{ticket.subject}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-zinc-600 bg-zinc-800/50 px-2 py-0.5 rounded-md">{ticket.category}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_BADGE[ticket.status] ?? STATUS_BADGE.open}`}>
+                          {STATUS_LABEL[ticket.status] ?? ticket.status}
+                        </span>
+                        {ticket.priority === 'urgent' && (
+                          <span className="text-xs px-2 py-0.5 rounded-full border bg-red-500/10 text-red-400 border-red-500/20">
+                            🔴 Urgent
+                          </span>
+                        )}
+                        {ticket.assigned_name && (
+                          <span className="text-xs text-zinc-500">Being handled by {ticket.assigned_name}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                      <span className="text-xs text-zinc-600">{relativeTime(ticket.updated_at)}</span>
+                      <Link
+                        href={`/dashboard/support/${ticket.id}`}
+                        className="text-xs text-yellow-400 hover:text-yellow-300 font-medium transition-colors"
+                      >
+                        View Ticket →
+                      </Link>
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                  <span className="text-xs text-zinc-600">{relativeTime(ticket.updated_at)}</span>
-                  <Link
-                    href={`/dashboard/support/${ticket.id}`}
-                    className="text-xs text-yellow-400 hover:text-yellow-300 font-medium transition-colors"
-                  >
-                    View Ticket →
-                  </Link>
-                </div>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
-      )}
+
+        {/* Right — help cards (2fr) */}
+        <div className="col-span-2 space-y-4">
+
+          {/* Need help fast? */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-1">Need help fast?</h3>
+            <p className="text-xs text-zinc-500 mb-4">Reach us directly for a quicker response.</p>
+            <div className="space-y-2.5">
+              <a
+                href="https://wa.me/258871252278"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 rounded-xl border border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 text-sm font-medium transition-colors"
+              >
+                💬 <span>Live Support via WhatsApp</span>
+              </a>
+              <a
+                href="https://discord.gg/tFxv9JMa"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 w-full px-4 py-2.5 rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 text-sm font-medium transition-colors"
+              >
+                🎮 <span>Join our Discord</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Common Issues */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-1">Common Issues</h3>
+            <p className="text-xs text-zinc-500 mb-4">Click to open a pre-filled ticket.</p>
+            <div className="space-y-1">
+              {COMMON_ISSUES.map(({ label, subject }) => (
+                <button
+                  key={subject}
+                  onClick={() => openModal(subject)}
+                  className="w-full text-left text-sm text-zinc-400 hover:text-yellow-400 py-2 border-b border-[#1A1A1A] last:border-0 transition-colors cursor-pointer"
+                >
+                  {label} →
+                </button>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      </div>
 
       {showModal && (
         <NewTicketModal
           onClose={() => setShowModal(false)}
           onCreated={handleCreated}
+          initialSubject={modalSubject}
         />
       )}
     </div>
