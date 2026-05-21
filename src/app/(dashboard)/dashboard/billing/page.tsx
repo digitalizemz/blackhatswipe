@@ -194,19 +194,20 @@ export default function BillingPage() {
 
   const [userId,             setUserId]             = useState('')
   const [email,              setEmail]              = useState('')
+  const [memberSince,        setMemberSince]        = useState<string | null>(null)
   const [planCancelAt,       setPlanCancelAt]       = useState<string | null>(null)
   const [purchasedFirstSale, setPurchasedFirstSale] = useState(false)
   const [loading,            setLoading]            = useState(true)
 
   const [invoices,         setInvoices]         = useState<Invoice[]>([])
-  const [loadingInvoices,  setLoadingInvoices]  = useState(false)
+  const [loadingInvoices,  setLoadingInvoices]  = useState(true)
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo>(null)
 
-  const [showCancel,  setShowCancel]  = useState(false)
-  const [cancelling,  setCancelling]  = useState(false)
+  const [showCancel,   setShowCancel]   = useState(false)
+  const [cancelling,   setCancelling]   = useState(false)
   const [reactivating, setReactivating] = useState(false)
-  const [showRefund,  setShowRefund]  = useState(false)
-  const [toast,       showToast]      = useToast()
+  const [showRefund,   setShowRefund]   = useState(false)
+  const [toast,        showToast]       = useToast()
 
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [statusMessage,   setStatusMessage]   = useState<string | null>(null)
@@ -217,8 +218,8 @@ export default function BillingPage() {
       if (!user) { setLoading(false); return }
       setUserId(user.id)
       setEmail(user.email ?? '')
+      setMemberSince(formatDate(user.created_at))
 
-      // Guard: columns may not exist if SQL migration hasn't run yet
       try {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
@@ -237,8 +238,6 @@ export default function BillingPage() {
       }
       setLoading(false)
 
-      // Load Stripe invoice + subscription data in background
-      setLoadingInvoices(true)
       try {
         const res  = await fetch('/api/stripe/invoices')
         const data = await res.json()
@@ -258,7 +257,7 @@ export default function BillingPage() {
     try {
       const res  = await fetch('/api/user/cancel-subscription', { method: 'POST' })
       const data = await res.json()
-      setShowCancel(false) // always close modal first
+      setShowCancel(false)
 
       if (data.message === 'no_stripe_subscription') {
         setStatusMessage('Your plan is managed manually. Contact support to cancel: wa.me/258871252278')
@@ -323,12 +322,12 @@ export default function BillingPage() {
   const expiryDisplay    = cancelAtDisplay ?? periodEndDisplay
 
   return (
-    <div className="p-8 max-w-xl">
+    <div className="p-8">
       <h1 className="text-2xl font-bold text-white mb-6">Billing</h1>
 
-      {/* Toast */}
+      {/* Notifications */}
       {toast && (
-        <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm font-medium border ${
+        <div className={`mb-5 px-4 py-2.5 rounded-lg text-sm font-medium border ${
           toast.ok
             ? 'bg-green-500/10 text-green-400 border-green-500/20'
             : 'bg-red-500/10 text-red-400 border-red-500/20'
@@ -336,151 +335,211 @@ export default function BillingPage() {
           {toast.msg}
         </div>
       )}
-
-      {/* Status message (e.g. manual plan — contact support) */}
       {statusMessage && (
-        <div className="mb-4 px-4 py-3 rounded-lg text-sm bg-zinc-800/60 border border-zinc-700 text-zinc-300 leading-relaxed">
+        <div className="mb-5 px-4 py-3 rounded-lg text-sm bg-zinc-800/60 border border-zinc-700 text-zinc-300 leading-relaxed">
           {statusMessage}
         </div>
       )}
 
-      {/* ── Current Plan ── */}
-      <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">Current Plan</h2>
+      {/* ── Row 1: Stat cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
 
-        {loading ? (
-          <div className="h-8 bg-zinc-800 rounded animate-pulse w-24" />
-        ) : (
-          <div className="flex items-center gap-3 flex-wrap">
-            <span className={`text-sm px-3 py-1 rounded-full font-semibold border ${planCls}`}>
-              {planLabel}
-            </span>
-            {isPro && isPrivileged && (
-              <span className="text-sm text-zinc-400">Unlimited access</span>
-            )}
-            {isPro && !isPrivileged && isCancelling && (
-              <span className="text-sm text-zinc-400">
-                Cancels on <span className="text-white font-medium">{expiryDisplay ?? '—'}</span>
-              </span>
-            )}
-            {isPro && !isPrivileged && !isCancelling && periodEndDisplay && (
-              <span className="text-sm text-zinc-400">
-                Pro Plan — Renews on <span className="text-zinc-200">{periodEndDisplay}</span>
-              </span>
-            )}
-            {!isPro && (
-              <span className="text-sm text-zinc-500">Upgrade to Pro to unlock all features</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ── Your Products ── */}
-      {!loading && (isPro || purchasedFirstSale) && (
-        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">
-            Your Products
-          </h2>
-          <div className="space-y-3">
-            {isPro && (
-              <div className="flex items-start gap-3">
-                <span className="text-yellow-400 mt-0.5 shrink-0">✓</span>
-                <div>
-                  <p className="text-sm text-white font-medium">BlackHat Swipe Pro</p>
-                  {isPrivileged ? (
-                    <p className="text-xs text-zinc-500 mt-0.5">Unlimited access</p>
-                  ) : isCancelling ? (
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      Cancels on {expiryDisplay ?? '—'}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-zinc-500 mt-0.5">
-                      Active{periodEndDisplay ? ` — renews ${periodEndDisplay}` : ''}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {purchasedFirstSale && (
-              <div className="flex items-start gap-3">
-                <span className="text-yellow-400 mt-0.5 shrink-0">✓</span>
-                <div>
-                  <p className="text-sm text-white font-medium">First Sale in 24H</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">Lifetime Access</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Manage Subscription (Pro non-privileged only) ── */}
-      {isPro && !isPrivileged && (
-        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">
-            💳 Manage Subscription
-          </h2>
-
-          {isCancelling ? (
-            <div className="space-y-3">
-              {/* Warning banner */}
-              <div className="bg-yellow-400/5 border border-yellow-400/30 rounded-lg px-4 py-3 leading-relaxed">
-                <p className="text-sm text-yellow-300 font-medium mb-1">
-                  ⚠️ Your subscription has been cancelled.
-                </p>
-                <p className="text-xs text-yellow-300/70">
-                  You keep Pro access until{' '}
-                  <span className="font-semibold text-yellow-300">{expiryDisplay ?? '—'}</span>.
-                  After that, your account will switch to Free.
-                </p>
-              </div>
-
-              <button
-                onClick={handleReactivate}
-                disabled={reactivating}
-                className="w-full py-2.5 rounded-lg text-sm border border-yellow-400/40 text-yellow-400 hover:border-yellow-400/70 hover:text-yellow-300 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {reactivating ? 'Reactivating…' : 'Reactivate Subscription'}
-              </button>
-
-              <button
-                onClick={() => setShowRefund(true)}
-                className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer"
-              >
-                Request Refund
-              </button>
-            </div>
+        {/* Current Plan */}
+        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Current Plan</p>
+          {loading ? (
+            <div className="h-7 bg-zinc-800 rounded animate-pulse w-20" />
           ) : (
-            <div className="space-y-2">
-              <button
-                onClick={() => setShowCancel(true)}
-                className="w-full py-2.5 rounded-lg text-sm border border-red-900/50 text-red-400 hover:border-red-700/60 hover:text-red-300 transition-colors cursor-pointer"
-              >
-                Cancel Subscription
-              </button>
-              <button
-                onClick={() => setShowRefund(true)}
-                className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer"
-              >
-                Request Refund
-              </button>
-            </div>
+            <>
+              <span className={`inline-block text-sm px-3 py-1 rounded-full font-semibold border ${planCls}`}>
+                {planLabel}
+              </span>
+              <p className="text-xs text-zinc-500 mt-2.5">
+                {isPro && isPrivileged ? 'Unlimited access' :
+                 isPro && isCancelling ? `Cancels ${expiryDisplay ?? '—'}` :
+                 isPro && periodEndDisplay ? `Renews ${periodEndDisplay}` :
+                 isPro ? 'Active' :
+                 'Free plan'}
+              </p>
+            </>
           )}
         </div>
+
+        {/* Next Payment */}
+        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Next Payment</p>
+          {loading || loadingInvoices ? (
+            <div className="space-y-1.5">
+              <div className="h-7 bg-zinc-800 rounded animate-pulse w-20" />
+              <div className="h-4 bg-zinc-800/70 rounded animate-pulse w-28" />
+            </div>
+          ) : isPro && !isPrivileged && !isCancelling && periodEndDisplay ? (
+            <>
+              <p className="text-xl font-bold text-white">
+                {invoices[0] ? `$${invoices[0].amount.toFixed(2)}` : '—'}
+              </p>
+              <p className="text-xs text-zinc-500 mt-1">on {periodEndDisplay}</p>
+            </>
+          ) : isPro && !isPrivileged && isCancelling ? (
+            <>
+              <p className="text-base font-semibold text-yellow-400/80">No renewal</p>
+              <p className="text-xs text-zinc-500 mt-1">Access until {expiryDisplay ?? '—'}</p>
+            </>
+          ) : (
+            <>
+              <p className="text-xl font-bold text-zinc-600">—</p>
+              <p className="text-xs text-zinc-600 mt-1">{isPro ? 'Managed plan' : 'Upgrade to unlock'}</p>
+            </>
+          )}
+        </div>
+
+        {/* Member Since */}
+        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-5">
+          <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-3">Member Since</p>
+          {loading ? (
+            <div className="space-y-1.5">
+              <div className="h-7 bg-zinc-800 rounded animate-pulse w-24" />
+              <div className="h-4 bg-zinc-800/70 rounded animate-pulse w-36" />
+            </div>
+          ) : (
+            <>
+              <p className="text-xl font-bold text-white">{memberSince ?? '—'}</p>
+              <p className="text-xs text-zinc-500 mt-1 truncate">{email || '—'}</p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Free user: upgrade prompt ── */}
+      {!isPro && (
+        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-8 mb-6">
+          <div className="max-w-lg">
+            <div className="text-3xl mb-3">🚀</div>
+            <h2 className="text-lg font-bold text-white mb-2">Upgrade to Pro</h2>
+            <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
+              Get full access to all offers, creatives, and scaling intelligence.
+            </p>
+            <button
+              onClick={handleUpgradeClick}
+              disabled={checkoutLoading}
+              className="inline-flex items-center justify-center h-11 px-8 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {checkoutLoading ? (
+                <>
+                  <span className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin mr-2" />
+                  Redirecting…
+                </>
+              ) : (
+                'Upgrade to Pro →'
+              )}
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* ── Invoice History ── */}
+      {/* ── Row 2: Products + Manage Subscription (Pro non-privileged) ── */}
       {isPro && !isPrivileged && (
-        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6 mb-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-4">
-            Invoice History
-          </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+          {/* Your Products */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-5">Your Products</h2>
+            {loading ? (
+              <div className="space-y-3">
+                <div className="h-12 bg-zinc-800/50 rounded animate-pulse" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center shrink-0 mt-0.5">
+                    <span className="text-yellow-400 text-xs font-bold">✓</span>
+                  </div>
+                  <div>
+                    <p className="text-sm text-white font-medium">BlackHat Swipe Pro</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {isCancelling
+                        ? `Cancels ${expiryDisplay ?? '—'}`
+                        : periodEndDisplay
+                          ? `Active — renews ${periodEndDisplay}`
+                          : 'Active'}
+                    </p>
+                  </div>
+                </div>
+
+                {purchasedFirstSale && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-yellow-400 text-xs font-bold">✓</span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-white font-medium">First Sale in 24H</p>
+                      <p className="text-xs text-zinc-500 mt-0.5">Lifetime Access</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Manage Subscription */}
+          <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-5">Manage Subscription</h2>
+
+            {isCancelling ? (
+              <div className="space-y-3">
+                <div className="bg-yellow-400/5 border border-yellow-400/30 rounded-lg px-4 py-3 leading-relaxed">
+                  <p className="text-sm text-yellow-300 font-medium mb-1">
+                    ⚠️ Your subscription has been cancelled.
+                  </p>
+                  <p className="text-xs text-yellow-300/70">
+                    You keep Pro access until{' '}
+                    <span className="font-semibold text-yellow-300">{expiryDisplay ?? '—'}</span>.
+                    After that, your account will switch to Free.
+                  </p>
+                </div>
+                <button
+                  onClick={handleReactivate}
+                  disabled={reactivating}
+                  className="w-full py-2.5 rounded-lg text-sm border border-yellow-400/40 text-yellow-400 hover:border-yellow-400/70 hover:text-yellow-300 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {reactivating ? 'Reactivating…' : 'Reactivate Subscription'}
+                </button>
+                <button
+                  onClick={() => setShowRefund(true)}
+                  className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer"
+                >
+                  Request Refund
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <button
+                  onClick={() => setShowCancel(true)}
+                  className="w-full py-2.5 rounded-lg text-sm border border-red-900/50 text-red-400 hover:border-red-700/60 hover:text-red-300 transition-colors cursor-pointer"
+                >
+                  Cancel Subscription
+                </button>
+                <button
+                  onClick={() => setShowRefund(true)}
+                  className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors cursor-pointer"
+                >
+                  Request Refund
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Row 3: Invoice History (Pro non-privileged) ── */}
+      {isPro && !isPrivileged && (
+        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-5">Invoice History</h2>
 
           {loadingInvoices ? (
             <div className="space-y-2">
-              {[1, 2].map(i => (
-                <div key={i} className="h-10 bg-zinc-800/50 rounded animate-pulse" />
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-12 bg-zinc-800/50 rounded animate-pulse" />
               ))}
             </div>
           ) : invoices.length === 0 ? (
@@ -490,22 +549,23 @@ export default function BillingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-zinc-600 text-xs uppercase tracking-wide border-b border-zinc-800">
-                    <th className="pb-2 font-medium">Date</th>
-                    <th className="pb-2 font-medium">Description</th>
-                    <th className="pb-2 font-medium">Amount</th>
-                    <th className="pb-2 font-medium">Status</th>
-                    <th className="pb-2 font-medium"></th>
+                    <th className="pb-3 pr-6 font-medium">Date</th>
+                    <th className="pb-3 pr-6 font-medium">Description</th>
+                    <th className="pb-3 pr-6 font-medium">Amount</th>
+                    <th className="pb-3 pr-6 font-medium">Status</th>
+                    <th className="pb-3 font-medium text-right">Invoice</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {invoices.map(inv => (
-                    <tr key={inv.id} className="text-zinc-300">
-                      <td className="py-3 pr-4 whitespace-nowrap text-zinc-400">{inv.date}</td>
-                      <td className="py-3 pr-4 text-zinc-300 truncate max-w-[160px]">{inv.description}</td>
-                      <td className="py-3 pr-4 whitespace-nowrap font-medium text-white">
-                        ${inv.amount.toFixed(2)} {inv.currency}
+                    <tr key={inv.id} className="text-zinc-300 hover:bg-zinc-800/20 transition-colors">
+                      <td className="py-3.5 pr-6 whitespace-nowrap text-zinc-400 text-xs">{inv.date}</td>
+                      <td className="py-3.5 pr-6 text-zinc-300">{inv.description}</td>
+                      <td className="py-3.5 pr-6 whitespace-nowrap font-semibold text-white">
+                        ${inv.amount.toFixed(2)}{' '}
+                        <span className="text-zinc-500 font-normal text-xs">{inv.currency}</span>
                       </td>
-                      <td className="py-3 pr-4 whitespace-nowrap">
+                      <td className="py-3.5 pr-6 whitespace-nowrap">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${
                           inv.status === 'paid'
                             ? 'bg-green-500/10 text-green-400 border border-green-500/20'
@@ -514,7 +574,7 @@ export default function BillingPage() {
                           {inv.status ?? 'Unknown'}
                         </span>
                       </td>
-                      <td className="py-3 text-right">
+                      <td className="py-3.5 text-right">
                         {inv.pdf && (
                           <a
                             href={inv.pdf}
@@ -532,31 +592,6 @@ export default function BillingPage() {
               </table>
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── Upgrade Prompt (Free only) ── */}
-      {!isPro && (
-        <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6">
-          <div className="text-3xl mb-3">🚀</div>
-          <h2 className="text-lg font-bold text-white mb-2">Upgrade to Pro</h2>
-          <p className="text-sm text-zinc-400 mb-5 leading-relaxed">
-            Get full access to all offers, creatives, and scaling intelligence.
-          </p>
-          <button
-            onClick={handleUpgradeClick}
-            disabled={checkoutLoading}
-            className="inline-flex items-center justify-center w-full h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {checkoutLoading ? (
-              <>
-                <span className="w-4 h-4 rounded-full border-2 border-black/30 border-t-black animate-spin mr-2" />
-                Redirecting…
-              </>
-            ) : (
-              'Upgrade to Pro →'
-            )}
-          </button>
         </div>
       )}
 
