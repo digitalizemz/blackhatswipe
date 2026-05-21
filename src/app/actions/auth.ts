@@ -49,6 +49,18 @@ export async function login(formData: FormData) {
   redirect('/dashboard')
 }
 
+export async function requestPasswordReset(formData: FormData) {
+  const supabase = await createClient()
+  const email    = formData.get('email') as string
+
+  await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback?type=recovery`,
+  })
+
+  // Always redirect with success message — don't reveal whether email exists
+  redirect(`/login?message=${encodeURIComponent('If that email is registered, you\'ll receive a reset link shortly.')}`)
+}
+
 export async function logout() {
   const supabase = await createClient()
   await supabase.auth.signOut()

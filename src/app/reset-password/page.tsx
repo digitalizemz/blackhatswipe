@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 
@@ -26,31 +26,22 @@ function Logo() {
   )
 }
 
-function ResetPasswordContent() {
-  const router       = useRouter()
-  const searchParams = useSearchParams()
-  const supabase     = createClient()
+export default function ResetPasswordPage() {
+  const router   = useRouter()
+  const supabase = createClient()
 
-  const [password,  setPassword]  = useState('')
-  const [confirm,   setConfirm]   = useState('')
-  const [error,     setError]     = useState<string | null>(null)
-  const [loading,   setLoading]   = useState(false)
-  const [checking,  setChecking]  = useState(true)
-  const [invalid,   setInvalid]   = useState(false)
+  const [password, setPassword] = useState('')
+  const [confirm,  setConfirm]  = useState('')
+  const [error,    setError]    = useState<string | null>(null)
+  const [loading,  setLoading]  = useState(false)
+  const [checking, setChecking] = useState(true)
+  const [invalid,  setInvalid]  = useState(false)
 
-  const doneRef = useRef(false)
-
+  // The auth callback already exchanged the code and set a session.
+  // Just verify the session exists before showing the form.
   useEffect(() => {
-    const code = searchParams.get('code')
-    if (!code) {
-      setInvalid(true)
-      setChecking(false)
-      return
-    }
-    supabase.auth.exchangeCodeForSession(code).then(({ error }) => {
-      if (doneRef.current) return
-      doneRef.current = true
-      if (error) setInvalid(true)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) setInvalid(true)
       setChecking(false)
     })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -167,13 +158,5 @@ function ResetPasswordContent() {
         </p>
       </div>
     </div>
-  )
-}
-
-export default function ResetPasswordPage() {
-  return (
-    <Suspense fallback={<Spinner />}>
-      <ResetPasswordContent />
-    </Suspense>
   )
 }
