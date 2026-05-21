@@ -111,12 +111,9 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
   const isPro    = userPlan === 'pro' || isAdmin || isEditor
 
   const handleDiscordClick = (e: React.MouseEvent) => {
+    if (isPro) return // let <a href> open naturally
     e.preventDefault()
-    if (isPro) {
-      window.open(DISCORD_URL, '_blank')
-    } else {
-      setShowDiscordModal(true)
-    }
+    setShowDiscordModal(true)
   }
 
   async function handleUpgrade() {
@@ -229,7 +226,10 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
           )}
           <div className={cn('space-y-0.5', collapsed ? 'mt-4' : 'mt-0')}>
             {/* Discord — gated by plan */}
-            <button
+            <a
+              href={DISCORD_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               onClick={handleDiscordClick}
               className={discordNavCls}
               title={collapsed ? 'Discord' : undefined}
@@ -244,7 +244,7 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
                   }
                 </>
               )}
-            </button>
+            </a>
 
             {moreNav.map((item) => (
               <NavItem

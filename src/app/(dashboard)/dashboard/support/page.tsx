@@ -31,21 +31,29 @@ interface Ticket {
   status: string; assigned_name: string | null; updated_at: string; created_at: string
 }
 
+const REFUND_REASONS = ['Not what I expected', 'Technical issues', 'Duplicate charge', 'Other']
+
 // ── New Ticket Modal ──────────────────────────────────────────────────────────
 
 interface NewTicketModalProps {
-  onClose:   () => void
-  onCreated: (ticket: Ticket) => void
+  onClose:          () => void
+  onCreated:        (ticket: Ticket) => void
+  initialCategory?: string
+  initialSubject?:  string
+  initialPriority?: 'normal' | 'urgent'
 }
 
-function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
-  const [subject,     setSubject]     = useState('')
-  const [category,    setCategory]    = useState(CATEGORIES[0])
-  const [priority,    setPriority]    = useState<'normal' | 'urgent'>('normal')
-  const [description, setDescription] = useState('')
-  const [submitting,  setSubmitting]  = useState(false)
-  const [error,       setError]       = useState('')
-  const [senderName,  setSenderName]  = useState('')
+function NewTicketModal({ onClose, onCreated, initialCategory, initialSubject, initialPriority }: NewTicketModalProps) {
+  const [subject,      setSubject]      = useState(initialSubject  ?? '')
+  const [category,     setCategory]     = useState(initialCategory ?? CATEGORIES[0])
+  const [priority,     setPriority]     = useState<'normal' | 'urgent'>(initialPriority ?? 'normal')
+  const [refundReason, setRefundReason] = useState(REFUND_REASONS[0])
+  const [description,  setDescription]  = useState('')
+  const [submitting,   setSubmitting]   = useState(false)
+  const [error,        setError]        = useState('')
+  const [senderName,   setSenderName]   = useState('')
+
+  const isRefundTicket = category === 'Billing Issue' && subject.toLowerCase().includes('refund')
 
   const supabase = createClient()
   useEffect(() => {
@@ -59,10 +67,14 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
     if (!description.trim()) { setError('Description is required'); return }
     setSubmitting(true); setError('')
     try {
+      const fullDescription = isRefundTicket
+        ? `Refund reason: ${refundReason}\n\n${description}`
+        : description
+      const effectivePriority = isRefundTicket ? 'urgent' : priority
       const res  = await fetch('/api/support/tickets', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ subject, category, priority, description, sender_name: senderName }),
+        body:    JSON.stringify({ subject, category, priority: effectivePriority, description: fullDescription, sender_name: senderName }),
       })
       const body = await res.json()
       if (!res.ok) { setError(body.error ?? 'Failed to create ticket'); return }
@@ -78,9 +90,17 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4">
       <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-2xl p-6 w-full max-w-lg shadow-2xl">
         <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-white">Open New Ticket</h2>
+          <h2 className="text-base font-bold text-white">
+            {isRefundTicket ? '💸 Request Refund' : 'Open New Ticket'}
+          </h2>
           <button onClick={onClose} className="text-zinc-500 hover:text-white text-xl leading-none cursor-pointer">×</button>
         </div>
+
+        {isRefundTicket && (
+          <p className="text-xs text-zinc-500 mb-4 leading-relaxed">
+            Refund requests are reviewed within 3–5 business days. Marked urgent automatically.
+          </p>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -102,14 +122,14 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
                   <button
                     key={p}
                     type="button"
-                    onClick={() => setPriority(p)}
-                    className={`flex-1 text-sm font-medium cursor-pointer transition-all capitalize ${
-                      priority === p
+                    onClick={() => !isRefundTicket && setPriority(p)}
+                    className={`flex-1 text-sm font-medium transition-all capitalize ${
+                      (isRefundTicket ? p === 'urgent' : priority === p)
                         ? p === 'urgent'
                           ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                           : 'bg-yellow-400/10 text-yellow-400'
                         : 'bg-[#111111] text-zinc-500 hover:text-zinc-300'
-                    }`}
+                    } ${isRefundTicket ? 'cursor-default' : 'cursor-pointer'}`}
                   >
                     {p}
                   </button>
@@ -118,12 +138,21 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
             </div>
           </div>
 
+          {isRefundTicket && (
+            <div>
+              <label className="text-sm text-zinc-300 mb-1.5 block">Refund Reason</label>
+              <select value={refundReason} onChange={e => setRefundReason(e.target.value)} className={`${inputCls} h-11 cursor-pointer`}>
+                {REFUND_REASONS.map(r => <option key={r}>{r}</option>)}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="text-sm text-zinc-300 mb-1.5 block">Description *</label>
             <textarea
               value={description}
               onChange={e => setDescription(e.target.value)}
-              placeholder="Describe your issue in detail…"
+              placeholder={isRefundTicket ? 'Describe why you are requesting a refund…' : 'Describe your issue in detail…'}
               rows={4}
               className={`${inputCls} py-3 resize-none`}
               style={{ minHeight: 100 }}
@@ -139,7 +168,7 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
             disabled={submitting}
             className="flex-1 h-11 bg-yellow-400 hover:bg-yellow-500 text-black font-semibold rounded-lg text-sm cursor-pointer disabled:opacity-50 transition-all"
           >
-            {submitting ? 'Opening…' : 'Open Ticket'}
+            {submitting ? 'Opening…' : isRefundTicket ? 'Submit Refund Request' : 'Open Ticket'}
           </button>
           <button onClick={onClose} className="flex-1 h-11 border border-zinc-700 text-zinc-400 hover:text-white rounded-lg text-sm cursor-pointer transition-colors">
             Cancel
@@ -152,12 +181,15 @@ function NewTicketModal({ onClose, onCreated }: NewTicketModalProps) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type ModalDefaults = { category?: string; subject?: string; priority?: 'normal' | 'urgent' } | null
+
 export default function SupportPage() {
-  const [tickets,    setTickets]    = useState<Ticket[]>([])
-  const [loading,    setLoading]    = useState(true)
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const [showModal,  setShowModal]  = useState(false)
-  const [successMsg, setSuccessMsg] = useState('')
+  const [tickets,       setTickets]       = useState<Ticket[]>([])
+  const [loading,       setLoading]       = useState(true)
+  const [fetchError,    setFetchError]    = useState<string | null>(null)
+  const [showModal,     setShowModal]     = useState(false)
+  const [modalDefaults, setModalDefaults] = useState<ModalDefaults>(null)
+  const [successMsg,    setSuccessMsg]    = useState('')
   const successTimer = useRef<ReturnType<typeof setTimeout>>()
 
   async function loadTickets() {
@@ -174,7 +206,14 @@ export default function SupportPage() {
     }
   }
 
-  useEffect(() => { loadTickets() }, [])
+  useEffect(() => {
+    loadTickets()
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('type') === 'refund') {
+      setModalDefaults({ category: 'Billing Issue', subject: 'Refund Request', priority: 'urgent' })
+      setShowModal(true)
+    }
+  }, [])
 
   function handleCreated(ticket: Ticket) {
     setShowModal(false)
@@ -277,8 +316,11 @@ export default function SupportPage() {
 
       {showModal && (
         <NewTicketModal
-          onClose={() => setShowModal(false)}
+          onClose={() => { setShowModal(false); setModalDefaults(null) }}
           onCreated={handleCreated}
+          initialCategory={modalDefaults?.category}
+          initialSubject={modalDefaults?.subject}
+          initialPriority={modalDefaults?.priority}
         />
       )}
     </div>
