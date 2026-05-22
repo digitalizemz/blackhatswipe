@@ -92,6 +92,7 @@ export default function BillingPage() {
   const [memberSince,        setMemberSince]        = useState<string | null>(null)
   const [planCancelAt,       setPlanCancelAt]       = useState<string | null>(null)
   const [purchasedFirstSale, setPurchasedFirstSale] = useState(false)
+  const [stripeCustomerId,   setStripeCustomerId]   = useState<string | null>(null)
   const [loading,            setLoading]            = useState(true)
 
   const [invoices,         setInvoices]         = useState<Invoice[]>([])
@@ -116,7 +117,7 @@ export default function BillingPage() {
       try {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
-          .select('subscription_cancel_at, purchased_first_sale')
+          .select('subscription_cancel_at, purchased_first_sale, stripe_customer_id')
           .eq('id', user.id)
           .single()
 
@@ -125,6 +126,7 @@ export default function BillingPage() {
         } else {
           setPlanCancelAt(prof?.subscription_cancel_at ?? null)
           setPurchasedFirstSale(prof?.purchased_first_sale ?? false)
+          setStripeCustomerId(prof?.stripe_customer_id ?? null)
         }
       } catch (e) {
         console.error('[billing] profile load error:', e)
@@ -209,6 +211,9 @@ export default function BillingPage() {
     ? 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20'
     : 'bg-zinc-800 text-zinc-400 border-zinc-700'
 
+  const isStripeCustomer  = !!stripeCustomerId
+  const isHotmartCustomer = !isStripeCustomer && isPro && !isPrivileged
+
   const cancelAtDisplay  = formatDate(planCancelAt)
   const periodEndDisplay = subscriptionInfo?.periodEnd ?? null
   const isCancelling     = !!planCancelAt || subscriptionInfo?.cancelAtPeriodEnd === true
@@ -277,6 +282,18 @@ export default function BillingPage() {
             <>
               <p className="text-base font-semibold text-yellow-400/80">No renewal</p>
               <p className="text-xs text-zinc-500 mt-1">Access until {expiryDisplay ?? '—'}</p>
+            </>
+          ) : isHotmartCustomer ? (
+            <>
+              <p className="text-sm font-semibold text-zinc-400">Managed by Hotmart</p>
+              <a
+                href="https://app.hotmart.com/purchases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors mt-1 inline-block"
+              >
+                View invoices on Hotmart →
+              </a>
             </>
           ) : (
             <>
@@ -404,6 +421,26 @@ export default function BillingPage() {
                   Support &amp; Refund →
                 </Link>
               </div>
+            ) : isHotmartCustomer ? (
+              <div className="space-y-3">
+                <a
+                  href="https://app.hotmart.com/purchases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors flex items-center justify-center"
+                >
+                  Manage on Hotmart →
+                </a>
+                <p className="text-xs text-zinc-600 leading-relaxed">
+                  To cancel or manage your subscription, visit your Hotmart account.
+                </p>
+                <Link
+                  href="/dashboard/support"
+                  className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors flex items-center justify-center"
+                >
+                  Support &amp; Refund →
+                </Link>
+              </div>
             ) : (
               <div className="space-y-2">
                 <button
@@ -434,6 +471,21 @@ export default function BillingPage() {
               {[1, 2, 3].map(i => (
                 <div key={i} className="h-12 bg-zinc-800/50 rounded animate-pulse" />
               ))}
+            </div>
+          ) : invoices.length === 0 && isHotmartCustomer ? (
+            <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-zinc-300 font-medium mb-1">Your invoices are in your Hotmart account</p>
+                <p className="text-xs text-zinc-500">All billing history and receipts are available at app.hotmart.com</p>
+              </div>
+              <a
+                href="https://app.hotmart.com/purchases"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 inline-flex items-center justify-center h-9 px-4 rounded-lg text-sm font-medium border border-yellow-400/30 text-yellow-400 hover:border-yellow-400/60 hover:text-yellow-300 transition-colors whitespace-nowrap"
+              >
+                View invoices on Hotmart →
+              </a>
             </div>
           ) : invoices.length === 0 ? (
             <p className="text-sm text-zinc-500">No invoices yet.</p>
