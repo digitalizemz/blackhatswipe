@@ -70,14 +70,15 @@ export default function DashboardHeader({ userEmail, userPlan, userRole, userFul
   }, [open])
 
   // Fetch renewal date once for Pro (non-privileged) users when dropdown first opens
+  // Uses unified endpoint that handles both Stripe and Hotmart customers
   useEffect(() => {
     if (!open || !isPro || isPrivileged || fetchedRef.current) return
     fetchedRef.current = true
-    fetch('/api/stripe/invoices')
+    fetch('/api/user/renewal-date')
       .then(r => r.json())
       .then(body => {
-        if (body.subscription?.periodEndIso) {
-          setRenewalIso(body.subscription.periodEndIso)
+        if (body.renewalIso) {
+          setRenewalIso(body.renewalIso)
         }
       })
       .catch(() => {})
@@ -88,8 +89,10 @@ export default function DashboardHeader({ userEmail, userPlan, userRole, userFul
     ? Math.max(0, Math.ceil((new Date(renewalIso).getTime() - Date.now()) / 86_400_000))
     : null
 
-  const progressPercent = daysRemaining !== null
-    ? Math.max(0, Math.min(100, ((30 - daysRemaining) / 30) * 100))
+  // Use 31-day cycle so "31 days left" = 0% consumed (full bar from left = empty = just renewed)
+  const billingCycleDays = 31
+  const progressPercent  = daysRemaining !== null
+    ? Math.max(2, Math.min(100, ((billingCycleDays - daysRemaining) / billingCycleDays) * 100))
     : 0
 
   const renewalDateLabel = renewalIso
