@@ -34,16 +34,21 @@ export async function POST(request: Request) {
 
     if (found) {
       // Existing user — upgrade or confirm renewal; clear any pending cancellation
+      const nextChargeDate = body.data?.subscription?.next_charge_date
+      const renewalUpdate: Record<string, unknown> = {
+        plan:                   'pro',
+        plan_changed_at:        new Date().toISOString(),
+        subscription_cancel_at: null,
+      }
+      if (nextChargeDate) {
+        renewalUpdate.hotmart_next_billing_date = new Date(nextChargeDate).toISOString()
+      }
       await supabase
         .from('profiles')
-        .update({
-          plan:                   'pro',
-          plan_changed_at:        new Date().toISOString(),
-          subscription_cancel_at: null,
-        })
+        .update(renewalUpdate)
         .eq('id', found.id)
 
-      console.log('[hotmart webhook] renewed/upgraded existing user:', email)
+      console.log('[hotmart webhook] renewed/upgraded existing user:', email, '— next charge:', nextChargeDate ?? 'unknown')
     } else {
       // New user — create account with temp password
       const tempPassword = Math.random().toString(36).slice(-8) + 'Aa1!'
@@ -138,6 +143,25 @@ export async function POST(request: Request) {
       console.log('[hotmart webhook] subscription cancelled, access until:', nextBillingDate)
     } else {
       console.warn('[hotmart webhook] SUBSCRIPTION_CANCELLATION — user not found:', subEmail)
+    }
+  }
+
+  // ── SUBSCRIPTION_BILLING_DATE_CHANGED ───────────────────────────────────────
+  // Hotmart updated the next charge date — sync it to profiles
+  if (event === 'SUBSCRIPTION_BILLING_DATE_CHANGED') {
+    const nextChargeDate = body.data?.subscription?.next_charge_date
+    if (nextChargeDate) {
+      const subEmail = subscriberEmail ?? email
+      const found    = await findUser(subEmail)
+      if (found) {
+        await supabase
+          .from('profiles')
+          .update({ hotmart_next_billing_date: new Date(nextChargeDate).toISOString() })
+          .eq('id', found.id)
+        console.log('[hotmart webhook] billing date updated for:', subEmail, '→', new Date(nextChargeDate).toISOString())
+      } else {
+        console.warn('[hotmart webhook] SUBSCRIPTION_BILLING_DATE_CHANGED — user not found:', subEmail)
+      }
     }
   }
 

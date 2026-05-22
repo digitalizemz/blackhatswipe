@@ -92,8 +92,9 @@ export default function BillingPage() {
   const [memberSince,        setMemberSince]        = useState<string | null>(null)
   const [planCancelAt,       setPlanCancelAt]       = useState<string | null>(null)
   const [purchasedFirstSale, setPurchasedFirstSale] = useState(false)
-  const [stripeCustomerId,   setStripeCustomerId]   = useState<string | null>(null)
-  const [loading,            setLoading]            = useState(true)
+  const [stripeCustomerId,        setStripeCustomerId]        = useState<string | null>(null)
+  const [hotmartNextBillingDate,  setHotmartNextBillingDate]  = useState<string | null>(null)
+  const [loading,                 setLoading]                 = useState(true)
 
   const [invoices,         setInvoices]         = useState<Invoice[]>([])
   const [loadingInvoices,  setLoadingInvoices]  = useState(true)
@@ -117,7 +118,7 @@ export default function BillingPage() {
       try {
         const { data: prof, error: profErr } = await supabase
           .from('profiles')
-          .select('subscription_cancel_at, purchased_first_sale, stripe_customer_id')
+          .select('subscription_cancel_at, purchased_first_sale, stripe_customer_id, hotmart_next_billing_date')
           .eq('id', user.id)
           .single()
 
@@ -127,6 +128,7 @@ export default function BillingPage() {
           setPlanCancelAt(prof?.subscription_cancel_at ?? null)
           setPurchasedFirstSale(prof?.purchased_first_sale ?? false)
           setStripeCustomerId(prof?.stripe_customer_id ?? null)
+          setHotmartNextBillingDate(prof?.hotmart_next_billing_date ?? null)
         }
       } catch (e) {
         console.error('[billing] profile load error:', e)
@@ -256,6 +258,7 @@ export default function BillingPage() {
                 {isPro && isPrivileged ? 'Unlimited access' :
                  isPro && isCancelling ? `Cancels ${expiryDisplay ?? '—'}` :
                  isPro && periodEndDisplay ? `Renews ${periodEndDisplay}` :
+                 isHotmartCustomer && hotmartNextBillingDate ? `Renews ${formatDate(hotmartNextBillingDate)}` :
                  isPro ? 'Active' :
                  'Free plan'}
               </p>
@@ -285,12 +288,23 @@ export default function BillingPage() {
             </>
           ) : isHotmartCustomer ? (
             <>
-              <p className="text-sm font-semibold text-zinc-400">Managed by Hotmart</p>
+              {hotmartNextBillingDate ? (
+                <>
+                  <p className="text-xl font-bold text-white">
+                    {new Date(hotmartNextBillingDate).toLocaleDateString('en-US', {
+                      month: 'long', day: 'numeric', year: 'numeric',
+                    })}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-1">Managed by Hotmart</p>
+                </>
+              ) : (
+                <p className="text-sm font-semibold text-zinc-400">Managed by Hotmart</p>
+              )}
               <a
                 href="https://app.hotmart.com/purchases"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors mt-1 inline-block"
+                className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors mt-2 inline-block"
               >
                 View invoices on Hotmart →
               </a>
