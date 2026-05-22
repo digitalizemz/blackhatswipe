@@ -33,6 +33,9 @@ export async function GET() {
         periodEnd:         periodEndTs
           ? new Date(periodEndTs * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
           : null,
+        periodEndIso:      periodEndTs
+          ? new Date(periodEndTs * 1000).toISOString()
+          : null,
         cancelAtPeriodEnd: activeSub.cancel_at_period_end,
       }
     : null

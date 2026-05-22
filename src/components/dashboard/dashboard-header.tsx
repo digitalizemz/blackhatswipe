@@ -33,14 +33,17 @@ interface DashboardHeaderProps {
 
 export default function DashboardHeader({ userEmail, userPlan, userRole, userFullName }: DashboardHeaderProps) {
   const [open, setOpen] = useState(false)
-  const ref  = useRef<HTMLDivElement>(null)
-  const pathname = usePathname()
+  const [renewalIso, setRenewalIso] = useState<string | null>(null)
+  const ref        = useRef<HTMLDivElement>(null)
+  const fetchedRef = useRef(false)
+  const pathname   = usePathname()
 
   const pageTitle = pageTitles[pathname] ?? 'Dashboard'
 
-  const isAdmin  = userRole === 'admin'
-  const isEditor = userRole === 'editor'
-  const isPro    = userPlan === 'pro' || isAdmin || isEditor
+  const isAdmin      = userRole === 'admin'
+  const isEditor     = userRole === 'editor'
+  const isPrivileged = isAdmin || isEditor
+  const isPro        = userPlan === 'pro' || isPrivileged
 
   const roleLabel = isAdmin ? 'Admin' : isEditor ? 'Editor' : isPro ? 'Pro' : 'Free'
   const badgeCls  = isAdmin
@@ -56,6 +59,7 @@ export default function DashboardHeader({ userEmail, userPlan, userRole, userFul
     isPro   ? 'Pro'   : 'Free',
   ].join(' · ')
 
+  // Click-outside to close
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -64,6 +68,39 @@ export default function DashboardHeader({ userEmail, userPlan, userRole, userFul
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
+
+  // Fetch renewal date once for Pro (non-privileged) users when dropdown first opens
+  useEffect(() => {
+    if (!open || !isPro || isPrivileged || fetchedRef.current) return
+    fetchedRef.current = true
+    fetch('/api/stripe/invoices')
+      .then(r => r.json())
+      .then(body => {
+        if (body.subscription?.periodEndIso) {
+          setRenewalIso(body.subscription.periodEndIso)
+        }
+      })
+      .catch(() => {})
+  }, [open, isPro, isPrivileged])
+
+  // Progress bar calculations
+  const daysRemaining = renewalIso !== null
+    ? Math.max(0, Math.ceil((new Date(renewalIso).getTime() - Date.now()) / 86_400_000))
+    : null
+
+  const progressPercent = daysRemaining !== null
+    ? Math.max(0, Math.min(100, ((30 - daysRemaining) / 30) * 100))
+    : 0
+
+  const renewalDateLabel = renewalIso
+    ? new Date(renewalIso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null
+
+  const barColor = daysRemaining === null
+    ? 'bg-zinc-700'
+    : daysRemaining <= 5  ? 'bg-red-500'
+    : daysRemaining <= 10 ? 'bg-yellow-500'
+    : 'bg-green-500'
 
   return (
     <header className="h-16 border-b border-[#1A1A1A] bg-[#050505] flex items-center justify-between px-6 shrink-0 z-10">
@@ -91,6 +128,54 @@ export default function DashboardHeader({ userEmail, userPlan, userRole, userFul
                 <span className="text-xs text-zinc-500">{roleLine}</span>
               </div>
             </div>
+
+            {/* Subscription progress — Pro non-privileged */}
+            {isPro && !isPrivileged && (
+              <div className="px-4 py-3 border-b border-[#1A1A1A]">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] text-zinc-500">Subscription</span>
+                  {daysRemaining !== null && (
+                    <span className={`text-[11px] ${daysRemaining <= 5 ? 'text-red-400' : 'text-zinc-500'}`}>
+                      {daysRemaining}d left
+                    </span>
+                  )}
+                </div>
+                <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                  {daysRemaining !== null && (
+                    <div
+                      className={`h-1 rounded-full transition-all ${barColor}`}
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  )}
+                </div>
+                {daysRemaining !== null && daysRemaining <= 7 && renewalDateLabel && (
+                  <p className="text-[11px] text-red-400 mt-1.5">
+                    ⚠️ Renews soon — {renewalDateLabel}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Privileged users — unlimited */}
+            {isPrivileged && (
+              <div className="px-4 py-2.5 border-b border-[#1A1A1A]">
+                <span className="text-[11px] text-zinc-500">Unlimited access</span>
+              </div>
+            )}
+
+            {/* Free users — upgrade prompt */}
+            {!isPro && (
+              <div className="px-4 py-3 border-b border-[#1A1A1A]">
+                <p className="text-[11px] text-zinc-500 mb-1.5">Free Plan</p>
+                <Link
+                  href="/pricing"
+                  onClick={() => setOpen(false)}
+                  className="text-xs text-yellow-400 hover:text-yellow-300 font-medium transition-colors"
+                >
+                  Upgrade to Pro →
+                </Link>
+              </div>
+            )}
 
             {/* Menu items */}
             <div className="py-1">
