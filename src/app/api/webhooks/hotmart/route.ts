@@ -6,12 +6,13 @@ export const runtime = 'nodejs'
 export async function POST(request: Request) {
   const body = await request.json()
 
-  console.log('[hotmart webhook] received:', body.event, body.data?.buyer?.email)
+  const event         = body.event
+  const buyerEmail    = body.data?.buyer?.email?.toLowerCase()
+  const subscriberEmail = body.data?.subscriber?.email?.toLowerCase()
+  const email         = buyerEmail ?? subscriberEmail
+  const name          = body.data?.buyer?.name ?? body.data?.subscriber?.name
 
-  const event = body.event
-  const buyer = body.data?.buyer
-  const email = buyer?.email?.toLowerCase()
-  const name  = buyer?.name
+  console.log('[hotmart webhook] received:', event, email)
 
   if (!email) {
     console.error('[hotmart webhook] no email in payload')
@@ -20,31 +21,38 @@ export async function POST(request: Request) {
 
   const supabase = createAdminClient()
 
+  // ── Helper: look up auth user by email ──────────────────────────────────────
+  async function findUser(lookupEmail: string) {
+    const { data } = await supabase.auth.admin.listUsers()
+    return data?.users?.find(u => u.email?.toLowerCase() === lookupEmail) ?? null
+  }
+
+  // ── PURCHASE_COMPLETE / PURCHASE_APPROVED ────────────────────────────────────
+  // New purchase OR subscription renewal — activate / keep Pro
   if (event === 'PURCHASE_COMPLETE' || event === 'PURCHASE_APPROVED') {
-    // Check if user already exists
-    const { data: existingUsers } = await supabase.auth.admin.listUsers()
-    const found = existingUsers?.users?.find(u => u.email?.toLowerCase() === email)
+    const found = await findUser(email)
 
     if (found) {
-      // User exists — just upgrade plan
+      // Existing user — upgrade or confirm renewal; clear any pending cancellation
       await supabase
         .from('profiles')
         .update({
-          plan:            'pro',
-          plan_changed_at: new Date().toISOString(),
+          plan:                   'pro',
+          plan_changed_at:        new Date().toISOString(),
+          subscription_cancel_at: null,
         })
         .eq('id', found.id)
 
-      console.log('[hotmart webhook] upgraded existing user:', email)
+      console.log('[hotmart webhook] renewed/upgraded existing user:', email)
     } else {
-      // User does not exist — create account
+      // New user — create account with temp password
       const tempPassword = Math.random().toString(36).slice(-8) + 'Aa1!'
 
       const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
         email,
-        password:       tempPassword,
-        email_confirm:  true,
-        user_metadata:  { full_name: name ?? email.split('@')[0] },
+        password:      tempPassword,
+        email_confirm: true,
+        user_metadata: { full_name: name ?? email.split('@')[0] },
       })
 
       if (createError || !newUser.user) {
@@ -52,7 +60,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: createError?.message }, { status: 500 })
       }
 
-      // Update profile to pro
+      // Set profile to Pro
       await supabase
         .from('profiles')
         .update({
@@ -62,13 +70,11 @@ export async function POST(request: Request) {
         })
         .eq('id', newUser.user.id)
 
-      // Generate password-reset link so the user can set their own password
+      // Generate password-set link
       const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
         type:  'recovery',
         email,
-        options: {
-          redirectTo: 'https://www.blackhatswipe.com/reset-password',
-        },
+        options: { redirectTo: 'https://www.blackhatswipe.com/reset-password' },
       })
 
       if (linkError) {
@@ -76,7 +82,6 @@ export async function POST(request: Request) {
       } else {
         console.log('[hotmart webhook] password reset link generated for:', email)
 
-        // Send welcome email via Resend
         if (process.env.RESEND_API_KEY && linkData?.properties?.action_link) {
           await fetch('https://api.resend.com/emails', {
             method:  'POST',
@@ -112,18 +117,53 @@ export async function POST(request: Request) {
     }
   }
 
-  if (
-    event === 'PURCHASE_CANCELED' ||
-    event === 'PURCHASE_REFUNDED'  ||
-    event === 'PURCHASE_CHARGEBACK'
-  ) {
-    const { data: existingUsers } = await supabase.auth.admin.listUsers()
-    const found = existingUsers?.users?.find(u => u.email?.toLowerCase() === email)
+  // ── SUBSCRIPTION_CANCELLATION ────────────────────────────────────────────────
+  // User cancelled — keep Pro access until next billing date
+  if (event === 'SUBSCRIPTION_CANCELLATION') {
+    const subEmail      = subscriberEmail ?? email
+    const nextBillingDate = body.data?.subscription?.next_charge_date
+    const found         = await findUser(subEmail)
 
     if (found) {
       await supabase
         .from('profiles')
-        .update({ plan: 'free', plan_changed_at: new Date().toISOString() })
+        .update({
+          subscription_cancel_at: nextBillingDate
+            ? new Date(nextBillingDate).toISOString()
+            : new Date().toISOString(),
+          plan_changed_at: new Date().toISOString(),
+        })
+        .eq('id', found.id)
+
+      console.log('[hotmart webhook] subscription cancelled, access until:', nextBillingDate)
+    } else {
+      console.warn('[hotmart webhook] SUBSCRIPTION_CANCELLATION — user not found:', subEmail)
+    }
+  }
+
+  // ── PURCHASE_DELAYED ─────────────────────────────────────────────────────────
+  // Recurring payment failed — Hotmart will retry; do NOT downgrade yet
+  if (event === 'PURCHASE_DELAYED') {
+    console.log('[hotmart webhook] payment failed for:', buyerEmail ?? email, '— grace period active')
+  }
+
+  // ── PURCHASE_CANCELED / PURCHASE_REFUNDED / PURCHASE_CHARGEBACK ──────────────
+  // Hard stop — remove Pro access immediately
+  if (
+    event === 'PURCHASE_CANCELED'   ||
+    event === 'PURCHASE_REFUNDED'   ||
+    event === 'PURCHASE_CHARGEBACK'
+  ) {
+    const found = await findUser(email)
+
+    if (found) {
+      await supabase
+        .from('profiles')
+        .update({
+          plan:                   'free',
+          plan_changed_at:        new Date().toISOString(),
+          subscription_cancel_at: null,
+        })
         .eq('id', found.id)
 
       console.log('[hotmart webhook] downgraded user to free:', email)
