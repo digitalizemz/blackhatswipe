@@ -421,7 +421,7 @@ export default function BillingPage() {
                     After that, your account will switch to Free.
                   </p>
                   <p className="text-xs text-yellow-300/50 mt-2">
-                    Your subscription is managed by Hotmart. To reactivate, visit your Hotmart purchases page.
+                    Your plan will not renew automatically as it has been cancelled. To reactivate, go to your Hotmart account and resubscribe.
                   </p>
                 </div>
                 <a
