@@ -249,7 +249,7 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
               )}
             </a>
 
-            {(isPro ? [affiliateNavItem, ...moreNavBase] : moreNavBase).map((item) => (
+            {[affiliateNavItem, ...moreNavBase].map((item) => (
               <NavItem
                 key={item.href}
                 {...item}

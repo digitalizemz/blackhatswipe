@@ -14,6 +14,7 @@ const FEATURES = [
   'Performance charts & data',
   'Save to Swipe File',
   'Steal These section',
+  '💰 Affiliate Program — earn 50% + 30% recurring',
 ]
 
 export default function UpgradeModal({ onClose, title, body }: UpgradeModalProps) {
@@ -35,7 +36,7 @@ export default function UpgradeModal({ onClose, title, body }: UpgradeModalProps
   }
 
   const heading  = title ?? 'Unlock Pro Access'
-  const subtitle = body  ?? 'Upgrade to Pro for full access to all offers, creatives, VSLs and performance data.'
+  const subtitle = body  ?? 'Upgrade to Pro for full access to all offers, creatives, VSLs, performance data — and join the affiliate program to earn recurring commissions.'
 
   return (
     <div
