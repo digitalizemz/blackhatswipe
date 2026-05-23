@@ -30,11 +30,12 @@ const mainNav = [
   { label: 'My Swipe File', href: '/dashboard/swipe-file',    icon: BookMarked    },
 ]
 
-const moreNav = [
-  { label: 'Affiliate Program', href: '/dashboard/affiliate', icon: DollarSign, external: false },
-  { label: 'Support',           href: '/dashboard/support',   icon: HelpCircle, external: false },
-  { label: 'Settings',          href: '/dashboard/settings',  icon: Settings,   external: false },
+const moreNavBase = [
+  { label: 'Support',  href: '/dashboard/support',  icon: HelpCircle, external: false },
+  { label: 'Settings', href: '/dashboard/settings', icon: Settings,   external: false },
 ]
+
+const affiliateNavItem = { label: 'Affiliate Program', href: '/dashboard/affiliate', icon: DollarSign, external: false }
 
 interface NavItemProps {
   label: string
@@ -248,7 +249,7 @@ export default function Sidebar({ userEmail, userPlan, userRole }: SidebarProps)
               )}
             </a>
 
-            {moreNav.map((item) => (
+            {(isPro ? [affiliateNavItem, ...moreNavBase] : moreNavBase).map((item) => (
               <NavItem
                 key={item.href}
                 {...item}

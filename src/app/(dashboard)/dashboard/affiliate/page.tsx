@@ -1,4 +1,51 @@
+'use client'
+
+import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
+
 export default function AffiliatePage() {
+  const profile = useUserProfile()
+  const isPro   = userIsPro(profile)
+
+  if (!isPro) {
+    return (
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '40px 24px' }}>
+        <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}>Affiliate Program</h1>
+        <p style={{ color: 'var(--color-text-secondary)', fontSize: 15, marginBottom: 32 }}>
+          Earn recurring commissions by referring new members to BlackHat Swipe Pro.
+        </p>
+
+        <div style={{
+          background: 'var(--color-background-secondary)',
+          border: '1px solid var(--color-border-secondary)',
+          borderRadius: 12,
+          padding: '40px 32px',
+          textAlign: 'center'
+        }}>
+          <p style={{ fontSize: 32, marginBottom: 16 }}>🔒</p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 12 }}>Pro Members Only</h2>
+          <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6, marginBottom: 28, maxWidth: 400, margin: '0 auto 28px' }}>
+            The affiliate program is exclusively available to BlackHat Swipe Pro members. Upgrade to Pro to unlock your affiliate link and start earning commissions.
+          </p>
+          <a
+            href="/pricing"
+            style={{
+              display: 'inline-block',
+              padding: '14px 32px',
+              background: '#EAB308',
+              color: '#000',
+              borderRadius: 8,
+              fontWeight: 700,
+              fontSize: 15,
+              textDecoration: 'none'
+            }}
+          >
+            Upgrade to Pro →
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ maxWidth: 680, margin: '0 auto', padding: '40px 24px' }}>
 
