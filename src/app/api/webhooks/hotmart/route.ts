@@ -39,6 +39,7 @@ export async function POST(request: Request) {
         plan:                   'pro',
         plan_changed_at:        new Date().toISOString(),
         subscription_cancel_at: null,
+        pro_expires_at:         null,
       }
       if (nextChargeDate) {
         renewalUpdate.hotmart_next_billing_date = new Date(nextChargeDate).toISOString()
@@ -164,6 +165,7 @@ export async function POST(request: Request) {
         .from('profiles')
         .update({
           subscription_cancel_at: expiryIso,
+          pro_expires_at:         expiryIso,
           plan_changed_at:        new Date().toISOString(),
         })
         .eq('id', found.id)
@@ -215,6 +217,7 @@ export async function POST(request: Request) {
           plan:                   'free',
           plan_changed_at:        new Date().toISOString(),
           subscription_cancel_at: null,
+          pro_expires_at:         null,
         })
         .eq('id', found.id)
 

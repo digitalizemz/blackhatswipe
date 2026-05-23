@@ -39,15 +39,25 @@ export default async function DashboardLayout({
   const rawPlan = isSuperAdmin ? 'pro'   : (profile?.plan ?? 'free')
   const role    = isSuperAdmin ? 'admin' : (profile?.role ?? 'user')
 
-  // If pro_expires_at is in the past, treat the plan as free (enforcement without DB write)
+  const now = new Date()
+
+  // If plan=pro but pro_expires_at is in the past → downgrade in UI before cron runs
   const isExpiredPro =
     rawPlan === 'pro' &&
     role !== 'admin' &&
     role !== 'editor' &&
     !!profile?.pro_expires_at &&
-    new Date(profile.pro_expires_at) < new Date()
+    new Date(profile.pro_expires_at) < now
 
-  const plan = isExpiredPro ? 'free' : rawPlan
+  // If plan=free but pro_expires_at is in the future → cancelled subscriber still in paid window
+  const hasCancelGrace =
+    rawPlan !== 'pro' &&
+    role !== 'admin' &&
+    role !== 'editor' &&
+    !!profile?.pro_expires_at &&
+    new Date(profile.pro_expires_at) > now
+
+  const plan = isExpiredPro ? 'free' : hasCancelGrace ? 'pro' : rawPlan
 
   const isFree =
     plan !== 'pro' &&
