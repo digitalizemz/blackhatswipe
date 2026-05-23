@@ -87,7 +87,7 @@ export default function AffiliatePage() {
         <div style={{ background: 'var(--color-background-secondary)', border: '1px solid var(--color-border-secondary)', borderRadius: 10, padding: '20px 16px', textAlign: 'center' }}>
           <p style={{ fontSize: 28, fontWeight: 700, color: '#EAB308' }}>∞</p>
           <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 4 }}>Cookie duration</p>
-          <p style={{ fontSize: 13, fontWeight: 500, marginTop: 4 }}>Last click attribution</p>
+          <p style={{ fontSize: 13, fontWeight: 500, marginTop: 4 }}>Infinite cookies</p>
         </div>
       </div>
 
