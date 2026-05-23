@@ -1,10 +1,25 @@
 'use client'
 
+import { useState } from 'react'
 import { useUserProfile, userIsPro } from '@/lib/user-profile-context'
 
 export default function AffiliatePage() {
-  const profile = useUserProfile()
-  const isPro   = userIsPro(profile)
+  const profile  = useUserProfile()
+  const isPro    = userIsPro(profile)
+  const [loading, setLoading] = useState(false)
+
+  async function handleGetPro() {
+    setLoading(true)
+    try {
+      const res  = await fetch('/api/stripe/create-checkout', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } catch (err) {
+      console.error('Checkout error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (!isPro) {
     return (
@@ -54,8 +69,9 @@ export default function AffiliatePage() {
             ))}
           </div>
 
-          <a
-            href="/pricing"
+          <button
+            onClick={handleGetPro}
+            disabled={loading}
             style={{
               display: 'block',
               width: '100%',
@@ -65,11 +81,13 @@ export default function AffiliatePage() {
               borderRadius: 8,
               fontWeight: 700,
               fontSize: 15,
-              textDecoration: 'none'
+              border: 'none',
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
             }}
           >
-            Get Pro Access →
-          </a>
+            {loading ? 'Redirecting…' : 'Get Pro Access →'}
+          </button>
         </div>
       </div>
     )
