@@ -125,22 +125,50 @@ export async function POST(request: Request) {
   // ── SUBSCRIPTION_CANCELLATION ────────────────────────────────────────────────
   // User cancelled — keep Pro access until next billing date
   if (event === 'SUBSCRIPTION_CANCELLATION') {
-    const subEmail      = subscriberEmail ?? email
-    const nextBillingDate = body.data?.subscription?.next_charge_date
-    const found         = await findUser(subEmail)
+    const subEmail = subscriberEmail ?? email
+
+    // Try multiple payload paths Hotmart uses for the end-of-access date
+    const rawDate = body.data?.subscription?.next_charge_date
+      ?? body.data?.subscription?.date_next_charge
+
+    console.log('[hotmart webhook] cancellation subscription data:', JSON.stringify(body.data?.subscription ?? {}))
+
+    const found = await findUser(subEmail)
 
     if (found) {
+      let expiryIso: string
+
+      if (rawDate) {
+        expiryIso = new Date(rawDate).toISOString()
+      } else {
+        // Fall back to the stored next billing date rather than defaulting to today
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('hotmart_next_billing_date')
+          .eq('id', found.id)
+          .single()
+
+        if (prof?.hotmart_next_billing_date) {
+          expiryIso = prof.hotmart_next_billing_date
+          console.log('[hotmart webhook] cancellation — using stored billing date as expiry:', expiryIso)
+        } else {
+          // Last resort: 30 days from now (never use today, that locks users out immediately)
+          const fallback = new Date()
+          fallback.setDate(fallback.getDate() + 30)
+          expiryIso = fallback.toISOString()
+          console.warn('[hotmart webhook] cancellation — no date in payload or profile, using 30d fallback:', expiryIso)
+        }
+      }
+
       await supabase
         .from('profiles')
         .update({
-          subscription_cancel_at: nextBillingDate
-            ? new Date(nextBillingDate).toISOString()
-            : new Date().toISOString(),
-          plan_changed_at: new Date().toISOString(),
+          subscription_cancel_at: expiryIso,
+          plan_changed_at:        new Date().toISOString(),
         })
         .eq('id', found.id)
 
-      console.log('[hotmart webhook] subscription cancelled, access until:', nextBillingDate)
+      console.log('[hotmart webhook] subscription cancelled, access until:', expiryIso)
     } else {
       console.warn('[hotmart webhook] SUBSCRIPTION_CANCELLATION — user not found:', subEmail)
     }

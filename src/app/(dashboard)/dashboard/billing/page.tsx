@@ -409,7 +409,37 @@ export default function BillingPage() {
           <div className="bg-[#0D0D0D] border border-[#1A1A1A] rounded-xl p-6">
             <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-5">Manage Subscription</h2>
 
-            {isCancelling ? (
+            {isHotmartCustomer && isCancelling ? (
+              <div className="space-y-3">
+                <div className="bg-yellow-400/5 border border-yellow-400/30 rounded-lg px-4 py-3 leading-relaxed">
+                  <p className="text-sm text-yellow-300 font-medium mb-1">
+                    ⚠️ Your subscription has been cancelled.
+                  </p>
+                  <p className="text-xs text-yellow-300/70">
+                    You keep Pro access until{' '}
+                    <span className="font-semibold text-yellow-300">{expiryDisplay ?? '—'}</span>.
+                    After that, your account will switch to Free.
+                  </p>
+                  <p className="text-xs text-yellow-300/50 mt-2">
+                    Your subscription is managed by Hotmart. To reactivate, visit your Hotmart purchases page.
+                  </p>
+                </div>
+                <a
+                  href="https://app.hotmart.com/product/purchases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors flex items-center justify-center"
+                >
+                  Manage Subscription on Hotmart →
+                </a>
+                <Link
+                  href="/dashboard/support"
+                  className="w-full py-2.5 rounded-lg text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors flex items-center justify-center"
+                >
+                  Support &amp; Refund →
+                </Link>
+              </div>
+            ) : isCancelling ? (
               <div className="space-y-3">
                 <div className="bg-yellow-400/5 border border-yellow-400/30 rounded-lg px-4 py-3 leading-relaxed">
                   <p className="text-sm text-yellow-300 font-medium mb-1">
