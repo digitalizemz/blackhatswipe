@@ -18,6 +18,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  DollarSign,
 } from 'lucide-react'
 
 const DISCORD_URL = 'https://discord.gg/tFxv9JMa'
@@ -30,8 +31,9 @@ const mainNav = [
 ]
 
 const moreNav = [
-  { label: 'Support',  href: '/dashboard/support',  icon: HelpCircle, external: false },
-  { label: 'Settings', href: '/dashboard/settings', icon: Settings,   external: false },
+  { label: 'Affiliate Program', href: '/dashboard/affiliate', icon: DollarSign, external: false },
+  { label: 'Support',           href: '/dashboard/support',   icon: HelpCircle, external: false },
+  { label: 'Settings',          href: '/dashboard/settings',  icon: Settings,   external: false },
 ]
 
 interface NavItemProps {

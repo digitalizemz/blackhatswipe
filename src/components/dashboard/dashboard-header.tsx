@@ -13,6 +13,7 @@ const pageTitles: Record<string, string> = {
   '/dashboard/support':     'Support',
   '/dashboard/settings':    'Settings',
   '/dashboard/billing':     'Billing',
+  '/dashboard/affiliate':   'Affiliate Program',
 }
 
 function getUserInitials(fullName: string | null | undefined, email: string): string {
