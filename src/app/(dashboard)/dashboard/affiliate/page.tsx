@@ -78,7 +78,7 @@ export default function AffiliatePage() {
           <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Best traffic sources</h2>
           <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
             YouTube reviews, Instagram Reels, TikTok, email lists, WhatsApp groups, Telegram channels.<br/>
-            <strong style={{ color: 'var(--color-text-primary)' }}>Target audiences:</strong> affiliate marketing, Facebook Ads, media buying, dropshipping, digital marketing, make money online.
+            <strong style={{ color: 'var(--color-text-primary)' }}>Target audiences:</strong> affiliate marketing, Facebook Ads, media buying, info products, nutra offers, direct response, make money online.
           </p>
         </div>
 
