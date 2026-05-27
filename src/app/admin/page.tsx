@@ -1,3 +1,5 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin-client'
 import Link from 'next/link'
 import { OverviewCharts } from './overview-charts'
@@ -25,6 +27,19 @@ function formatShortDate(iso: string) {
 const nicheBadge = 'text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700'
 
 export default async function AdminOverviewPage() {
+  // Editors must never see the overview — redirect before any data is fetched
+  const serverClient = await createClient()
+  const { data: { user } } = await serverClient.auth.getUser()
+  if (user) {
+    const adminClient = createAdminClient()
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    if (profile?.role === 'editor') redirect('/admin/offers')
+  }
+
   const supabase = createAdminClient()
 
   const sevenDaysAgo = new Date()

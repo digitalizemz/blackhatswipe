@@ -41,6 +41,20 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // Redirect editors away from admin overview before the page renders
+  if (user && (pathname === '/admin' || pathname === '/admin/') && !isRscRequest) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+    if (profile?.role === 'editor') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/admin/offers'
+      return NextResponse.redirect(url)
+    }
+  }
+
   return supabaseResponse
 }
 
